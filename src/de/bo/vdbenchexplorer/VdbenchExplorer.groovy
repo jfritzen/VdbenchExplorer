@@ -6,8 +6,12 @@ import java.awt.*;
 import java.awt.event.*;
 import javax.swing.*;
 import javax.swing.border.*;
-import javax.swing.table.TableModel;
+import javax.swing.table.JTableHeader;
+import javax.swing.table.TableColumn;
 import javax.swing.table.TableColumnModel;
+import javax.swing.table.TableModel;
+import javax.swing.event.TableColumnModelEvent;
+import javax.swing.event.TableColumnModelListener;
 import javax.swing.event.TableModelListener;
 import jplot.*;
 
@@ -70,7 +74,6 @@ class Table implements TableModel {
 	Cell getCellAt(int row, int col) {
 		return cols[col].getRow(row);
 	}
-
 }
 
 class VdbenchFlatfileTable extends Table {
@@ -237,16 +240,32 @@ class Cell {
 
 class Plot {
 	JFrame plotFrame;
+	JPanel p;
 	Column cx;
 	Column cy;
 	
 	Plot(Column c1, Column c2) {
 		this.cx = c1;
 		this.cy = c2;
-		
-		double[] x = c1.getDoubles();
-		double[] y = c2.getDoubles();
 
+		plotFrame = new JFrame();
+		p = new JPanel(new BorderLayout());
+		plotFrame.getContentPane().add(p);
+		init();
+	}	
+
+	void reinit(Column c1, Column c2) {
+		this.cx = c1;
+		this.cy = c2;
+		init();
+	}
+	
+	private void init() {
+		double[] x = cx.getDoubles();
+		double[] y = cy.getDoubles();
+
+		p.removeAll();
+		
 		GraphSettings gs = new GraphSettings();
 		gs.setMinValue(GraphSettings.X_AXIS, x.toList().min());
 		gs.setMaxValue(GraphSettings.X_AXIS, x.toList().max());
@@ -254,9 +273,9 @@ class Plot {
 		gs.setMaxValue(GraphSettings.Y_AXIS, y.toList().max());
 
 		GraphLabel l=new GraphLabel(GraphLabel.XLABEL, 
-				c1.columnHead.description);
+				cx.columnHead.description);
 		gs.addLabel(l);
-		l=new GraphLabel(GraphLabel.YLABEL, c2.columnHead.description);
+		l=new GraphLabel(GraphLabel.YLABEL, cy.columnHead.description);
 		l.setRotation(Math.PI*1.5);
 		gs.addLabel(l);
 		
@@ -265,42 +284,39 @@ class Plot {
 		// TO FIX: When the window is resized, the axis is scaled 
 		// correctly but the labels do not and loose their positions
 		// relative to the axis tick marks.  
-		if (c1.columnType == Type.LABEL) {
+		if (cx.columnType == Type.LABEL) {
 			gs.setDrawTicLabels(GraphSettings.X_AXIS, false);
-			c1.symbols.each {
+			cx.symbols.each {
 				// Use GraphLabel.DATA when you specify points in data 
 				// coordinates
 				l = new GraphLabel(GraphLabel.DATA, it);
-				println graph.toX(c1.l2d[it]);
-				l.setDataLocation(c1.l2d[it], 0.0D);
+				println graph.toX(cx.l2d[it]);
+				l.setDataLocation(cx.l2d[it], 0.0D);
 				gs.addLabel(l);
 			}
 		}
-		if (c2.columnType == Type.LABEL) {
+		if (cy.columnType == Type.LABEL) {
 			gs.setDrawTicLabels(GraphSettings.Y_AXIS, false);
-			c2.symbols.each {
+			cy.symbols.each {
 				// Use GraphLabel.DATA when you specify points in data 
 				// coordinates
 				l = new GraphLabel(GraphLabel.DATA, it);
-				println graph.toY(c2.l2d[it]);
-				l.setDataLocation(0.0D, c2.l2d[it]);
+				println graph.toY(cy.l2d[it]);
+				l.setDataLocation(0.0D, cy.l2d[it]);
 				gs.addLabel(l);
 			}
 		}		
 		
-		def s = (c1.table.description!=null)?c1.table.description:\
-				c1.columnHead.name+" - "+c2.columnHead.name;
-		plotFrame = new JFrame(s);
+		plotFrame.title=(cx.table.description!=null)?cx.table.description:\
+				cx.columnHead.name+" - "+cy.columnHead.name;
 		plotFrame.addWindowListener(new WindowAdapter() {
 		    public void windowClosing(WindowEvent e) {
 		      plotFrame.dispose();
 		      plotFrame = null;
 		    }
 		  });
-	
-		JPanel p = new JPanel(new BorderLayout());
+
 		p.add(graph,BorderLayout.CENTER);
-		plotFrame.getContentPane().add(p);
 		plotFrame.pack();
 		plotFrame.show();
 
@@ -308,7 +324,7 @@ class Plot {
 		Vector v = new Vector();
 
 		def points = [];
-		0.upto(c1.length()-1) {
+		0.upto(cx.length()-1) {
 			points << [x[it], y[it]];
 		}
 		points = points.sort { it[0] };
@@ -323,9 +339,14 @@ class Plot {
 	void kill() {
 		if (plotFrame!=null) {
 			plotFrame.dispose();
+			plotFrame=null;
 		}
 	}
 }
+
+/* Listeners
+ * 
+ */
 
 // Needed for resizing the frame such that the JScrollPane's size is updated
 class ResizeListener extends ComponentAdapter {
@@ -336,6 +357,7 @@ class ResizeListener extends ComponentAdapter {
 	}
 	
 	public void componentResized(ComponentEvent e) {
+		// Don't forget the parantheses!
 		closure();
     }
 }
@@ -362,11 +384,37 @@ class PopupListener extends MouseAdapter {
     }
 }
 
+class TCMListener implements TableColumnModelListener {
+	Closure closure;
+
+	TCMListener(Closure c) {
+		closure=c;
+	}
+
+	void columnAdded(TableColumnModelEvent e) {}
+	void columnRemoved(TableColumnModelEvent e) {}
+	void columnChanged(TableColumnModelEvent e) {}
+	void columnMarginChanged(javax.swing.event.ChangeEvent e) {}
+	void columnSelectionChanged(javax.swing.event.ListSelectionEvent e) {}
+	
+	void columnMoved(TableColumnModelEvent e) {
+		if (e.fromIndex!=e.toIndex) {
+			//println "column moved from "+e.fromIndex+" to "+e.toIndex;
+			//Don't forget the parantheses!
+			closure();
+		}
+	}
+}
+
+/* End of Listeners 
+ * 
+ */
+
 class JTable2 extends JTable {
 	int margin = 5;
 	TableModel tm;
 
-	JTable2(TableModel tm, VdbenchExplorerGUI v) {
+	JTable2(TableModel tm) {
 		super(tm);
 		this.tm = tm;
 		this.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
@@ -375,17 +423,6 @@ class JTable2 extends JTable {
 			this.getColumnModel().getColumn(col).preferredWidth=
 				this.columnWidth(col);
 		}
-		this.tableHeader.addMouseListener(new PopupListener({
-			// Find the column in which the MouseEvent was triggered
-			// TODO: Doesn't get rearranged columns yet
-			0.upto(tm.columnCount-1) { col ->
-				if (it.getSource().getHeaderRect(col).
-						contains(it.getX(), it.getY())) {
-					v.createPopupMenu(col).
-					show((Component) it.getSource(), it.getX(), it.getY());
-				}
-			}
-		}));
 		
 	}
 
@@ -416,8 +453,9 @@ class VdbenchExplorerGUI {
 	def swing;
 	def frame;
 	def plots = [];
-	Table t;
+	def fixedplots = [];
 	int margin = 10;
+	JTable2 jt2;
 
     private final def exit;
     private final def open;
@@ -427,10 +465,24 @@ class VdbenchExplorerGUI {
 
 		exit = swing.action(name:'Exit', closure:{System.exit(0)});
 		open = swing.action(name:'Open', closure:{
-			t = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
-			def jsp = new JScrollPane(new JTable2(t, this));
+			def t = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+			jt2 = new JTable2(t);
+
+			// Registering for right-clicks on the TableHeader
+			jt2.tableHeader.addMouseListener(new PopupListener({
+				// Find the column in which the MouseEvent was triggered
+				int col = jt2.getColumnModel().getColumnIndexAtX(it.getX());
+				createPopupMenu(jt2.convertColumnIndexToModel(col)).
+					show((Component) it.getSource(), it.getX(), it.getY());
+			}));
+
+			jt2.columnModel.addColumnModelListener(new TCMListener({
+				updatePlots();
+			}));
+			
 			// Resizing is very awkward, this is the best way I could
 			// do it. Took me 3 weeks to figure this out (20091013).
+			def jsp = new JScrollPane(jt2);
 			frame.addComponentListener(new ResizeListener({ 
 				jsp.preferredSize=new Dimension(
 						(int)swing.panel.size.width-margin, 
@@ -464,8 +516,9 @@ class VdbenchExplorerGUI {
 		def popup = swing.popupMenu(id:"popup") {
 			menuItem() {
 				action(name:'Plot', closure: {
-					t.getColumn(col).plotted=!t.getColumn(col).plotted;
-					println(t.getColumn(col).columnHead.description);
+					jt2.model.getColumn(col).plotted=
+						!jt2.model.getColumn(col).plotted;
+					println(jt2.model.getColumn(col).columnHead.description);
 					updatePlots();
 				})
 			};
@@ -479,54 +532,92 @@ class VdbenchExplorerGUI {
 
 		// Determine the plottable columns
 		// The first column that is checked as plot is always the x column
-		0.upto(t.getColumnCount()-1) { col ->
-			if (t.getColumn(col).plotted) {
+		0.upto(jt2.model.getColumnCount()-1) { col ->
+			int tmp = jt2.convertColumnIndexToModel(col);
+			if (jt2.tm.getColumn(tmp).plotted) {
 				if (count==0) {
-					xcol = t.getColumn(col);
+					xcol = jt2.model.getColumn(tmp);
+					//println "xcol="+tmp+"="+xcol;
 				} else {
-					ycols << t.getColumn(col);
+					ycols << jt2.model.getColumn(tmp);
+					//println "ycol="+tmp;
 				}
 				count++;
 			}
 		}
 
-		// Remove all plots that are not needed anymore. 
+		// Remove all plots that are not needed anymore and put them onto
+		// the reuse stack
 		def plots2 = [];
+		def reuse = [];
+		//println "Before: "+plots;
 		plots.each { plot ->
+			//println "plot -> "+plot;
 			if (plot.plotFrame == null) {
 				return;
 			}
 			
+			//println "plot.cx="+plot.cx+" xcol="+xcol;
 			if (plot.cx!=xcol) {
-				plot.kill();
+				reuse << plot;
 				return;
 			}
-			
-			boolean found = false;
+
+			boolean found = false
 			ycols.each { ycol ->
 				if (ycol==plot.cy) {
-					found=true;
+					//println "plot.cy="+plot.cy+" ycol="+ycol;
+					found = true;
+					return;
 				}
 			}
-			if (!found) {
-				plot.kill();
-				return;
+			if (found) {
+				plots2 << plot;
+			} else {
+				reuse << plot;
 			}
-			plots2 << plot;
 		}
-		plots = plots2;
-
+		plots = [];
+		plots2.each { it -> plots << it };
+		//println "After: "+plots;
+		//println "Reuse: "+reuse;
+		
 		// Create all plots that are needed and that do not already exist
 		ycols.each { ycol ->
+			//println "ycol: "+ycol;
+			//println "plots: "+plots.size+" reuse: "+reuse.size;
+
 			boolean found = false;
-			plots.each { plot ->
+			plots2.each { plot ->
+				//println plot;
 				if (plot.cy==ycol) {
-					found=true;
+					//println ycol.toString()+" found in "+plot;
+					found = true;
+					return;
 				}
 			}
+
 			if (!found) {
-				plots << new Plot(xcol, ycol);
+				// Reuse plots from the reuse stack before creating new ones
+				if (reuse.size>0) {
+					//println "reuse plot";
+					//println "adding "+xcol+" "+ycol;
+					reuse[0].reinit(xcol, ycol);
+					//println "cx, cy="+reuse[0].cx+" "+reuse[0].cy;
+					plots << reuse[0];
+					reuse.remove(0);
+				} else {
+					//println "create new";
+					//println "adding "+xcol+" "+ycol;
+					plots << new Plot(xcol, ycol);
+				}
 			}
+		}
+		//println "After2: "+plots;
+		//println "Reuse2: "+reuse;
+
+		reuse.each { plot ->
+			plot.kill();
 		}
 		
 	}
