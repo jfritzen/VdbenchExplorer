@@ -6,7 +6,10 @@ import java.awt.*;
 import java.awt.event.*;
 import javax.swing.*;
 import javax.swing.border.*;
+import javax.swing.plaf.UIResource;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.JTableHeader;
+import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
@@ -410,6 +413,39 @@ class TCMListener implements TableColumnModelListener {
  * 
  */
 
+/* Renderers
+ * 
+ */
+
+class CustomHeaderRenderer extends DefaultTableCellRenderer 
+	implements UIResource {
+    public Component getTableCellRendererComponent(JTable table, Object value,
+             boolean isSelected, boolean hasFocus, int row, int column) {
+    	if (table != null) {
+    		JTableHeader header = table.getTableHeader();
+    		if (header != null) {
+    	        int col=table.convertColumnIndexToModel(column);
+    	        if (((Table)table.model).getColumn(col).plotted) {
+    	        	setBackground(header.foreground);
+        			setForeground(header.background);
+    	        } else {
+    	        	setBackground(header.background);
+        			setForeground(header.foreground);
+    	        }
+    		}
+    	}
+
+        setText((value == null) ? "" : value.toString());
+        setToolTipText(getText());
+        setBorder(UIManager.getBorder("TableHeader.cellBorder"));
+        return this;
+    }
+}
+
+/* End of Renderers
+ * 
+ */
+
 class JTable2 extends JTable {
 	int margin = 5;
 	TableModel tm;
@@ -418,10 +454,12 @@ class JTable2 extends JTable {
 		super(tm);
 		this.tm = tm;
 		this.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-
+		def tcr = new CustomHeaderRenderer();
+		
 		0.upto(tm.columnCount-1) { col ->
 			this.getColumnModel().getColumn(col).preferredWidth=
 				this.columnWidth(col);
+			this.getColumnModel().getColumn(col).headerRenderer=tcr;
 		}
 		
 	}
@@ -515,11 +553,20 @@ class VdbenchExplorerGUI {
 	JPopupMenu createPopupMenu(int col) {
 		def popup = swing.popupMenu(id:"popup") {
 			menuItem() {
-				action(name:'Plot', closure: {
+				def tag=jt2.model.getColumn(col).plotted?"Don't plot":'Plot';
+				action(name:tag, closure: {
 					jt2.model.getColumn(col).plotted=
 						!jt2.model.getColumn(col).plotted;
 					println(jt2.model.getColumn(col).columnHead.description);
 					updatePlots();
+					/* Tried out many things to instantly redraw the column 
+					 * headers: 
+					 * jt2.revalidate(), jt2.repaint()
+					 * 
+					 * Both worked but only after another mouse click.
+					 * The following works instantly.
+					 */
+					jt2.tableHeader.repaint();
 				})
 			};
 		};		
