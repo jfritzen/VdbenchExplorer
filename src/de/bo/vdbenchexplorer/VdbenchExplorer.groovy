@@ -118,8 +118,15 @@ abstract class Column {
 	Type columnType = Type.LABEL;
 	ColumnHead columnHead;
 	Table table;
+	// masked is not in use currently
 	boolean masked = false;
+	// plotted: This column is to be plotted
 	boolean plotted = false;
+	/* groupby: Plot several curves discriminated by the values in this column
+	 * TODO: It usually does not make sense to have both plotted and groupby 
+	 * set to true.
+	 */ 
+	boolean groupby = false;
 	def d2l = [:], l2d = [:], symbols;
 	
 	abstract Cell getRow(int row);
@@ -170,6 +177,10 @@ class VdbenchFlatfileColumn extends Column {
 
 	int cardinality() {
 		return cells*.val.sort().unique().size();
+	}
+
+	String[] distinctVals() {
+		return (String[]) cells*.val.sort().unique();
 	}
 
 	void initSymbols() {
@@ -245,8 +256,22 @@ class Plot {
 	JFrame plotFrame;
 	JPanel p;
 	Column cx;
+	/* Must be of same size as cx */
 	Column cy;
-	
+	/* Use the discriminating values of the following column to plot
+	 * (cx,cy) as separate lines with distinct labels and colors.
+	 * Must be of same size as cx;
+	 * If null do not use groupby;
+	 */
+	Column groupby;
+
+	// Makes no sense, do not use
+	Plot() {
+		plotFrame = new JFrame();
+		p = new JPanel(new BorderLayout());
+		plotFrame.getContentPane().add(p);
+	}	
+
 	Plot(Column c1, Column c2) {
 		this.cx = c1;
 		this.cy = c2;
@@ -257,9 +282,32 @@ class Plot {
 		init();
 	}	
 
+	Plot(Column c1, Column c2, Column g) {
+		this.cx = c1;
+		this.cy = c2;
+		this.groupby = g;
+
+		plotFrame = new JFrame();
+		p = new JPanel(new BorderLayout());
+		plotFrame.getContentPane().add(p);
+		init();
+	}	
+
 	void reinit(Column c1, Column c2) {
 		this.cx = c1;
 		this.cy = c2;
+		init();
+	}
+	
+	void reinit(Column c1, Column c2, Column[] g) {
+		this.cx = c1;
+		this.cy = c2;
+		this.groupby = g;
+		init();
+	}
+	
+	void groupby(Column g) {
+		this.groupby = g;
 		init();
 	}
 	
@@ -284,7 +332,7 @@ class Plot {
 		
 		Graph_2D graph = new Graph_2D(gs);
 
-		// TO FIX: When the window is resized, the axis is scaled 
+		// TODO: When the window is resized, the axis is scaled 
 		// correctly but the labels do not and loose their positions
 		// relative to the axis tick marks.  
 		if (cx.columnType == Type.LABEL) {
@@ -323,19 +371,43 @@ class Plot {
 		plotFrame.pack();
 		plotFrame.show();
 
-		DataArray da = new DataArray();
-		Vector v = new Vector();
-
-		def points = [];
-		0.upto(cx.length()-1) {
-			points << [x[it], y[it]];
+		def da = [];
+		if (groupby!=null) {
+			int count=0;
+			groupby.distinctVals().each { val ->
+				def points = [];
+				DataArray d = new DataArray();
+				0.upto(cx.length()-1) {
+					if (groupby.getRow(it).val==val) {
+						//println it+" "+x[it]+" "+y[it]+" "+" "+groupby.getRow(it).val+" "+val;
+						points << [x[it], y[it]];
+					}
+				}
+				points = points.sort { it[0] };
+				points.each { d.addPoint(it[0], it[1]) };
+				d.setDrawSymbol(true);
+				d.setSymbol(2);
+				d.setColor(gencolor(count++, groupby.cardinality()));
+				d.name=groupby.columnHead.name+"="+val;
+				d.drawLegend=true;
+				da << d; 
+			};
+		} else {
+			def points = [];
+			DataArray d = new DataArray();
+			0.upto(cx.length()-1) {
+				points << [x[it], y[it]];
+			}
+			points = points.sort { it[0] };
+			points.each { d.addPoint(it[0], it[1]) };
+			d.setDrawSymbol(true);
+			d.setSymbol(2);
+			d.drawLegend=false;
+			da << d;
 		}
-		points = points.sort { it[0] };
-		points.each { da.addPoint(it[0], it[1]) };
-		da.setDrawSymbol(true);
-		da.setSymbol(2);
-		
-		v.add(da);
+
+		Vector v = new Vector();
+		da.each { it -> v.add(it) };
 		graph.show(v);
 	}
 
@@ -344,6 +416,11 @@ class Plot {
 			plotFrame.dispose();
 			plotFrame=null;
 		}
+	}
+
+	private Color gencolor(int i, int n) {
+		return new Color((float)(i+1)/(n+2), (float)(i+1)/(n+2), 
+				(float)(i+1)/(n+2));
 	}
 }
 
@@ -425,9 +502,17 @@ class CustomHeaderRenderer extends DefaultTableCellRenderer
     		JTableHeader header = table.getTableHeader();
     		if (header != null) {
     	        int col=table.convertColumnIndexToModel(column);
-    	        if (((Table)table.model).getColumn(col).plotted) {
-    	        	setBackground(header.foreground);
-        			setForeground(header.background);
+    			if (((Table)table.model).getColumn(col).plotted) {
+    				if (((Table)table.model).getColumn(col).groupby) {
+        	        	setForeground(Color.YELLOW);
+            			setBackground(header.foreground);
+    				} else {
+    					setForeground(header.background);
+    					setBackground(header.foreground);
+    				}
+    			} else if (((Table)table.model).getColumn(col).groupby) {
+    	        	setBackground(Color.YELLOW);
+        			setForeground(header.foreground);
     	        } else {
     	        	setBackground(header.background);
         			setForeground(header.foreground);
@@ -493,7 +578,9 @@ class VdbenchExplorerGUI {
 	def plots = [];
 	def fixedplots = [];
 	int margin = 10;
-	JTable2 jt2;
+	private JTable2 jt2;
+	private Column groupby = null;
+	private int groupbylimit = 10;
 
     private final def exit;
     private final def open;
@@ -557,8 +644,57 @@ class VdbenchExplorerGUI {
 				action(name:tag, closure: {
 					jt2.model.getColumn(col).plotted=
 						!jt2.model.getColumn(col).plotted;
-					println(jt2.model.getColumn(col).columnHead.description);
+					//println(jt2.model.getColumn(col).columnHead.description);
 					updatePlots();
+					/* Tried out many things to instantly redraw the column 
+					 * headers: 
+					 * jt2.revalidate(), jt2.repaint()
+					 * 
+					 * Both worked but only after another mouse click.
+					 * The following works instantly.
+					 */
+					jt2.tableHeader.repaint();
+				})
+			};
+			menuItem() {
+				def tag=jt2.model.getColumn(col).groupby?
+						"Don't Group By":'Group By';
+				action(name:tag, closure: {
+					// TODO: Allow larger cardinalities by creating ranges
+					if ((jt2.model.getColumn(col).cardinality()>groupbylimit) &&
+							(!jt2.model.getColumn(col).groupby)) {
+						JOptionPane.showMessageDialog(frame, 
+								"Columns' cardinality is too large ("+
+								jt2.model.getColumn(col).cardinality()+">"+
+								groupbylimit+")", "GroupBy not possible", 
+								JOptionPane.INFORMATION_MESSAGE);
+						return;
+					}
+					
+					jt2.model.getColumn(col).groupby=
+						!jt2.model.getColumn(col).groupby;
+					
+					// TODO: Allow more columns for grouping
+					// Remove groupby for other columns
+					0.upto(jt2.model.getColumnCount()-1) {
+						if (it!=col) {
+							jt2.model.getColumn(it).groupby=false;
+						}
+					}
+
+					if (jt2.model.getColumn(col).groupby) {
+						groupby=jt2.model.getColumn(col);
+						plots.each { plot -> 
+							plot.groupby(groupby);
+						};
+					} else {
+						plots.each { plot -> 
+							groupby=null;
+							plot.groupby(null);
+						}
+					};
+
+					//updatePlots();
 					/* Tried out many things to instantly redraw the column 
 					 * headers: 
 					 * jt2.revalidate(), jt2.repaint()
@@ -656,7 +792,7 @@ class VdbenchExplorerGUI {
 				} else {
 					//println "create new";
 					//println "adding "+xcol+" "+ycol;
-					plots << new Plot(xcol, ycol);
+					plots << new Plot(xcol, ycol, groupby);
 				}
 			}
 		}
