@@ -94,7 +94,7 @@ class VdbenchFlatfileTable extends Table {
 		}
 		heads=ls.grep({it =~ /tod/})[0].split();
 		heads.each {
-			cols << new VdbenchFlatfileColumn(t, new ColumnHead(name:it, 
+			cols << new SimpleColumn(t, new ColumnHead(name:it, 
 					description:h[it]));
 		}
 		ls.each {
@@ -114,6 +114,114 @@ class VdbenchFlatfileTable extends Table {
 	}
 }
 
+class SortedTable extends Table {
+	Table masterTable;
+	JTable jt=null;
+	private def rowRealToVirt;
+	private def rowVirtToReal;
+	
+	SortedTable(Table t) {
+		this(t, null);
+	}
+
+	SortedTable(Table t, JTable jt) {
+		this.masterTable=t;
+		this.jt=jt;
+		def c;
+		name=t.name;
+		description=t.description;
+		masterTable.cols.each { col ->
+			c = new SortedTableColumn(this, col);
+			cols << c;
+		}
+		rowRealToVirt = 0..(c.length()-1);
+		rowVirtToReal = 0..(c.length()-1);
+	}
+
+	void setJTable(JTable jt) {
+		this.jt = jt;
+	}
+
+	/* Sort all columns from top to down and from left to right:
+	 * The leftmost column is sorted fully, each right neighbour is only
+	 * sorted among those rows in which the values of the left neighbour 
+	 * column are equal etc. In every column, sorting is in ascending order.
+	 * 
+	 * Column reordering in the JTable is supported, i.e. the order in which
+	 * the columns are sorted is the visual order of the columns in the
+	 * JTable.
+	 * 
+	 * We do not create new SortedColumn objects because we want to keep
+	 * their object ids. Instead we access the rows via a mapping.
+	 */
+	private void sort() {
+		def mcol, tmp1, tmp2, tmp3, r2, col = 0;
+		def stack = [];
+
+		def rowPermutation = (0..cols[0].length()-1).toArray();
+		stack << [rowPermutation];
+
+		while (col<cols.size) {
+			mcol = mapColumn(col);
+			stack[col+1]=[];
+
+			stack[col].each { range ->
+				if (range.size()==1) {
+					return;
+				}
+				r2 = range.sort() { a,b ->
+					cols[mcol].getRealRow(a).getTypedVal() <=> 
+					cols[mcol].getRealRow(b).getTypedVal()
+				};
+				tmp1 = [];
+				tmp2 = cols[mcol].getRealRow(range[0]).val;
+				tmp3 = [];
+				range.eachWithIndex { it, ind ->
+					tmp3[it] = rowPermutation[r2[ind]];
+					if (tmp2!=cols[mcol].getRealRow(it).val) {
+						stack[col+1] << tmp1;
+						tmp1 = [];
+						tmp1 << it;
+						tmp2 = cols[mcol].getRealRow(it).val;
+ 					} else {
+ 						tmp1 << it;
+ 					}
+				};
+				range.each { it ->
+					rowPermutation[it] = tmp3[it];
+				}
+				stack[col+1] << tmp1;
+			};
+
+			col++;
+		}
+		
+		rowVirtToReal = rowPermutation;
+		rowRealToVirt=[];
+		(0..cols[0].length()-1).each {
+			rowRealToVirt[rowPermutation[it]]=it;
+		}
+		
+		return;
+	}
+
+	int real2virt(int row) {
+		return rowRealToVirt[row];
+	}
+	
+	int virt2real(int row) {
+		return rowVirtToReal[row];
+	}
+	
+	private int mapColumn(int col) {
+		if (jt==null) {
+			return col;
+		} else {
+			return jt.convertColumnIndexToModel(col);
+		}
+	}
+}
+
 abstract class Column {
 	Type columnType = Type.LABEL;
 	ColumnHead columnHead;
@@ -130,11 +238,12 @@ abstract class Column {
 	def d2l = [:], l2d = [:], symbols;
 	
 	abstract Cell getRow(int row);
+	abstract void setRow(int row, Cell c);
 	abstract void add(Cell c);
+	abstract void removeAll();
 	abstract Type guessType();
 	abstract int length();
 	abstract int cardinality();
-	abstract void initSymbols();
 	abstract double[] getDoubles();
 
 	static Type guessType(String[] l) {
@@ -149,18 +258,34 @@ abstract class Column {
 			return Type.LABEL;
 		}
 	}
+
+	Column add(Column c) {
+		 int row = length();
+		 c*.vals.each {
+			 add(new Cell(this, row++, it));
+		 }
+		 return this;
+	}
 }
 
-class VdbenchFlatfileColumn extends Column {
+class SimpleColumn extends Column {
 	def cells=[];
 	
-	VdbenchFlatfileColumn(Table t, ColumnHead ch) {
+	SimpleColumn(Table t, ColumnHead ch) {
 		this.columnHead = ch;
 		this.table = t;
 	}
 
 	void add(Cell c) {
 		this.cells << c;
+	}
+
+	void removeAll() {
+		cells=[];
+	}
+
+	void setRow(int row, Cell c) {
+		cells[row]=c;
 	}
 
 	Cell getRow(int row) {
@@ -208,6 +333,66 @@ class VdbenchFlatfileColumn extends Column {
 	}
 }
 
+class SortedTableColumn extends Column {
+	Table table;
+	private Column realCol;
+	
+	SortedTableColumn(SortedTable t, Column c) {
+		this.realCol = c;
+		this.table = t;
+		this.columnHead = c.columnHead;
+	}
+
+	// Overwritten methods
+	void add(Cell c) {
+		realCol.add(c);
+	}
+
+	void removeAll() {
+		realCol.removeAll();
+	}
+
+	void setRow(int row, Cell c) {
+		realCol.setRow(table.virt2real(row), c);
+	}
+
+	Cell getRow(int row) {
+		return realCol.getRow(table.virt2real(row));
+	}
+
+	int length() {
+		return realCol.length();
+	}
+
+	Type guessType() {
+		return realCol.guessType();
+	}
+
+	int cardinality() {
+		return realCol.cardinality();
+	}
+
+	String[] distinctVals() {
+		return realCol.distinctVals();
+	}
+
+	double[] getDoubles() {
+		def dr = realCol.getDoubles();
+		def dv = [];
+		0.upto(dr.size()-1) {
+			dv << dr[table.virt2real(it)];
+		};
+		return dv;
+	}
+
+	// Own methods
+	Cell getRealRow(int row) {
+		return realCol.getRow(row);
+	}
+
+
+}
+
 class ColumnHead {
 	String name;
 	String description;
@@ -225,7 +410,7 @@ class Cell {
 	}
 
 	Type getType() {
-		return t.getColumn(col).columnType;
+		return column.columnType;
 	}
 
 	Object getTypedVal() {
@@ -383,7 +568,7 @@ class Plot {
 						points << [x[it], y[it]];
 					}
 				}
-				points = points.sort { it[0] };
+				//points = points.sort { it[0] };
 				points.each { d.addPoint(it[0], it[1]) };
 				d.setDrawSymbol(true);
 				d.setSymbol(2);
@@ -398,7 +583,7 @@ class Plot {
 			0.upto(cx.length()-1) {
 				points << [x[it], y[it]];
 			}
-			points = points.sort { it[0] };
+			//points = points.sort { it[0] };
 			points.each { d.addPoint(it[0], it[1]) };
 			d.setDrawSymbol(true);
 			d.setSymbol(2);
@@ -590,9 +775,12 @@ class VdbenchExplorerGUI {
 
 		exit = swing.action(name:'Exit', closure:{System.exit(0)});
 		open = swing.action(name:'Open', closure:{
+//			def t = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 			def t = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+			t = new SortedTable(t);
 			jt2 = new JTable2(t);
-
+			t.setJTable(jt2);
+			
 			// Registering for right-clicks on the TableHeader
 			jt2.tableHeader.addMouseListener(new PopupListener({
 				// Find the column in which the MouseEvent was triggered
@@ -602,6 +790,7 @@ class VdbenchExplorerGUI {
 			}));
 
 			jt2.columnModel.addColumnModelListener(new TCMListener({
+				t.sort();
 				updatePlots();
 			}));
 			
