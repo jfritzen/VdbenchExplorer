@@ -65,6 +65,10 @@ class Table implements TableModel {
 	}
 
 	// Own methods
+
+	void add(Column c) {
+		cols << c;
+	}
 	
 	Column getColumn(int col) {
 		return cols[col];
@@ -131,7 +135,7 @@ class SortedTable extends Table {
 		name=t.name;
 		description=t.description;
 		masterTable.cols.each { col ->
-			c = new SortedTableColumn(this, col);
+			c = new ProxyColumn(this, col);
 			cols << c;
 		}
 		rowRealToVirt = 0..(c.length()-1);
@@ -155,46 +159,58 @@ class SortedTable extends Table {
 	 * their object ids. Instead we access the rows via a mapping.
 	 */
 	private void sort() {
-		def mcol, tmp1, tmp2, tmp3, r2, col = 0;
+		def mcol, tmp0, tmp1, tmp2, col = 0;
 		def stack = [];
 
 		def rowPermutation = (0..cols[0].length()-1).toArray();
+		//println "rP="+rowPermutation;
 		stack << [rowPermutation];
 
-		while (col<cols.size) {
+		while (col<cols.size && stack[col].size()<cols[0].length()) {
 			mcol = mapColumn(col);
 			stack[col+1]=[];
+			//println "c="+col;
 
+			tmp0 = [];
 			stack[col].each { range ->
+				//println "r="+range;
 				if (range.size()==1) {
+					stack[col+1] << range;
+					tmp0 += range.toList();
 					return;
 				}
-				r2 = range.sort() { a,b ->
+				range=range.sort() { a,b ->
 					cols[mcol].getRealRow(a).getTypedVal() <=> 
 					cols[mcol].getRealRow(b).getTypedVal()
 				};
+				//println "r="+range;
+				/* Don't know why toList() is necessary, but, nevertheless,
+				 * it is.
+				 */
+				tmp0 += range.toList();
 				tmp1 = [];
 				tmp2 = cols[mcol].getRealRow(range[0]).val;
-				tmp3 = [];
-				range.eachWithIndex { it, ind ->
-					tmp3[it] = rowPermutation[r2[ind]];
+				//println "tmp2="+tmp2;
+				range.each { it ->
+					//println "it="+it;
 					if (tmp2!=cols[mcol].getRealRow(it).val) {
 						stack[col+1] << tmp1;
 						tmp1 = [];
 						tmp1 << it;
 						tmp2 = cols[mcol].getRealRow(it).val;
+						//println "tmp2="+tmp2+" it="+it;
  					} else {
  						tmp1 << it;
  					}
 				};
-				range.each { it ->
-					rowPermutation[it] = tmp3[it];
-				}
 				stack[col+1] << tmp1;
 			};
-
+			rowPermutation=tmp0;
+			//println "tmp0="+tmp0;
+			//println "st="+stack[col+1];
 			col++;
 		}
+		//println "frP="+rowPermutation;
 		
 		rowVirtToReal = rowPermutation;
 		rowRealToVirt=[];
@@ -212,6 +228,10 @@ class SortedTable extends Table {
 	int virt2real(int row) {
 		return rowVirtToReal[row];
 	}
+
+	int length() {
+		return masterTable.cols[0].length();
+	}
 	
 	private int mapColumn(int col) {
 		if (jt==null) {
@@ -222,8 +242,95 @@ class SortedTable extends Table {
 	}
 }
 
+class RowFilteredTable extends Table {
+	Table masterTable;
+	JTable jt=null;
+	private def rowRealToVirt=[:];
+	private def rowVirtToReal=[:];
+	def closures=[];
+
+	RowFilteredTable(Table t) {
+		this(t, null);
+	}
+
+	RowFilteredTable(Table t, JTable jt) {
+		this.masterTable=t;
+		this.jt=jt;
+		def c;
+		name=t.name;
+		description=t.description;
+		masterTable.cols.each { col ->
+			c = new ProxyColumn(this, col);
+			cols << c;
+		}
+		0.upto(masterTable.cols[0].length()-1) {
+			rowRealToVirt[it]=it;
+			rowVirtToReal[it]=it;
+		}
+		println "v2r="+rowVirtToReal+" r2v="+rowRealToVirt;
+	}
+
+	void addFilter(int col, String[] vals, boolean inverse) {
+		closures << { row ->
+			def val = masterTable.getColumn(col).getRow(row).val;
+			boolean ret=vals.grep(val);
+			ret=inverse?!ret:ret;
+			println "row="+row+" val="+val+" ret="+ret+" vals="+vals;
+			return ret;
+		};
+	}
+
+	void removeFilter() {
+		closures.pop();
+	}
+
+	void removeAllFilters() {
+		closures = [];
+	}
+
+	int filterCount() {
+		return closures.size();
+	}
+	
+	boolean matches(int row) {
+		for(closure in closures) {
+			if (closure(row)) {
+				return true;
+			}
+		}
+	}
+	
+	void filter() {
+		int row=0;
+		rowVirtToReal=[:];
+		rowRealToVirt=[:];
+		0.upto(masterTable.getColumn(0).length()-1) {
+			println "it="+it+" row="+row;
+			if (!matches(it)) {
+				println masterTable.getRow(it).toString();
+				rowVirtToReal[row]=it;
+				rowRealToVirt[it]=row;
+				row++;
+			}
+		}
+		println "v2r="+rowVirtToReal+" r2v="+rowRealToVirt;
+	}
+
+	int real2virt(int row) {
+		return rowRealToVirt[row];
+	}
+	
+	int virt2real(int row) {
+		return rowVirtToReal[row];
+	}
+
+	int length() {
+		return rowVirtToReal.keySet().size();
+	}
+}
+
 abstract class Column {
-	Type columnType = Type.LABEL;
+	private Type columnType = Type.LABEL;
 	ColumnHead columnHead;
 	Table table;
 	// masked is not in use currently
@@ -259,6 +366,14 @@ abstract class Column {
 		}
 	}
 
+	Type getColumnType() {
+		return columnType;
+	}
+
+	void setColumnType(Type t) {
+		columnType = t;
+	}
+	
 	Column add(Column c) {
 		 int row = length();
 		 c*.vals.each {
@@ -276,6 +391,14 @@ class SimpleColumn extends Column {
 		this.table = t;
 	}
 
+	SimpleColumn(Table t, String head, String desc, String[] vals) {
+		this.columnHead = new ColumnHead(name:head, description:desc);
+		this.table = t;
+		vals.each {
+			cells << new Cell(this, cells.size(), it);
+		}
+	}
+	
 	void add(Cell c) {
 		this.cells << c;
 	}
@@ -333,11 +456,17 @@ class SimpleColumn extends Column {
 	}
 }
 
-class SortedTableColumn extends Column {
-	Table table;
+class ProxyColumn extends Column {
+	def table;
 	private Column realCol;
 	
-	SortedTableColumn(SortedTable t, Column c) {
+	ProxyColumn(SortedTable t, Column c) {
+		this.realCol = c;
+		this.table = t;
+		this.columnHead = c.columnHead;
+	}
+
+	ProxyColumn(RowFilteredTable t, Column c) {
 		this.realCol = c;
 		this.table = t;
 		this.columnHead = c.columnHead;
@@ -361,7 +490,7 @@ class SortedTableColumn extends Column {
 	}
 
 	int length() {
-		return realCol.length();
+		return table.length();
 	}
 
 	Type guessType() {
@@ -376,6 +505,26 @@ class SortedTableColumn extends Column {
 		return realCol.distinctVals();
 	}
 
+	Type getColumnType() {
+		return realCol.columnType;
+	}
+
+	void setColumnType(Type t) {
+		realCol.columnType=t;
+	}
+
+	Object[] getSymbols() {
+		return realCol.symbols;
+	}
+
+	HashMap getL2d() {
+		return realCol.l2d;
+	}
+	
+	HashMap getD2l() {
+		return realCol.d2l;
+	}
+	
 	double[] getDoubles() {
 		def dr = realCol.getDoubles();
 		def dv = [];
@@ -448,7 +597,7 @@ class Plot {
 	 * Must be of same size as cx;
 	 * If null do not use groupby;
 	 */
-	Column groupby;
+	Column groupby = null;
 
 	// Makes no sense, do not use
 	Plot() {
@@ -458,13 +607,7 @@ class Plot {
 	}	
 
 	Plot(Column c1, Column c2) {
-		this.cx = c1;
-		this.cy = c2;
-
-		plotFrame = new JFrame();
-		p = new JPanel(new BorderLayout());
-		plotFrame.getContentPane().add(p);
-		init();
+		this(c1, c2, null);
 	}	
 
 	Plot(Column c1, Column c2, Column g) {
@@ -479,9 +622,7 @@ class Plot {
 	}	
 
 	void reinit(Column c1, Column c2) {
-		this.cx = c1;
-		this.cy = c2;
-		init();
+		reinit(c1, c2, null);
 	}
 	
 	void reinit(Column c1, Column c2, Column[] g) {
@@ -493,6 +634,10 @@ class Plot {
 	
 	void groupby(Column g) {
 		this.groupby = g;
+		init();
+	}
+
+	void redraw() {
 		init();
 	}
 	
@@ -515,21 +660,22 @@ class Plot {
 		l.setRotation(Math.PI*1.5);
 		gs.addLabel(l);
 		
-		Graph_2D graph = new Graph_2D(gs);
-
-		// TODO: When the window is resized, the axis is scaled 
-		// correctly but the labels do not and loose their positions
-		// relative to the axis tick marks.  
+		/* TODO: When the window is resized, the axis is scaled 
+		 * correctly but the labels do not and loose their positions
+		 * relative to the axis tick marks.
+		 * TODO: Plotting long labels is still far from optimal.
+		 */ 
 		if (cx.columnType == Type.LABEL) {
 			gs.setDrawTicLabels(GraphSettings.X_AXIS, false);
 			cx.symbols.each {
 				// Use GraphLabel.DATA when you specify points in data 
 				// coordinates
 				l = new GraphLabel(GraphLabel.DATA, it);
-				println graph.toX(cx.l2d[it]);
 				l.setDataLocation(cx.l2d[it], 0.0D);
 				gs.addLabel(l);
 			}
+		} else {
+			gs.setDrawTicLabels(GraphSettings.X_AXIS, true);
 		}
 		if (cy.columnType == Type.LABEL) {
 			gs.setDrawTicLabels(GraphSettings.Y_AXIS, false);
@@ -537,12 +683,13 @@ class Plot {
 				// Use GraphLabel.DATA when you specify points in data 
 				// coordinates
 				l = new GraphLabel(GraphLabel.DATA, it);
-				println graph.toY(cy.l2d[it]);
 				l.setDataLocation(0.0D, cy.l2d[it]);
 				gs.addLabel(l);
 			}
+		} else {
+			gs.setDrawTicLabels(GraphSettings.Y_AXIS, true);
 		}		
-		
+
 		plotFrame.title=(cx.table.description!=null)?cx.table.description:\
 				cx.columnHead.name+" - "+cy.columnHead.name;
 		plotFrame.addWindowListener(new WindowAdapter() {
@@ -551,10 +698,6 @@ class Plot {
 		      plotFrame = null;
 		    }
 		  });
-
-		p.add(graph,BorderLayout.CENTER);
-		plotFrame.pack();
-		plotFrame.show();
 
 		def da = [];
 		if (groupby!=null) {
@@ -593,7 +736,13 @@ class Plot {
 
 		Vector v = new Vector();
 		da.each { it -> v.add(it) };
+
+		Graph_2D graph = new Graph_2D(gs);
 		graph.show(v);
+
+		p.add(graph,BorderLayout.CENTER);
+		plotFrame.pack();
+		plotFrame.show();
 	}
 
 	void kill() {
@@ -766,6 +915,9 @@ class VdbenchExplorerGUI {
 	private JTable2 jt2;
 	private Column groupby = null;
 	private int groupbylimit = 10;
+	private int delay = 500;
+	private java.util.Timer redrawRequest = null;
+	private def filter = null;
 
     private final def exit;
     private final def open;
@@ -775,11 +927,13 @@ class VdbenchExplorerGUI {
 
 		exit = swing.action(name:'Exit', closure:{System.exit(0)});
 		open = swing.action(name:'Open', closure:{
-//			def t = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
-			def t = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
-			t = new SortedTable(t);
-			jt2 = new JTable2(t);
-			t.setJTable(jt2);
+			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+//			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+			def t2 = new SortedTable(t1);
+			def t3 = new RowFilteredTable(t2);
+			jt2 = new JTable2(t3);
+			t2.setJTable(jt2);
+			filter = t3;
 			
 			// Registering for right-clicks on the TableHeader
 			jt2.tableHeader.addMouseListener(new PopupListener({
@@ -790,8 +944,23 @@ class VdbenchExplorerGUI {
 			}));
 
 			jt2.columnModel.addColumnModelListener(new TCMListener({
-				t.sort();
-				updatePlots();
+				/* When a column is dragged across the table we don't want
+				 * to recalculate the table and every plot for every 
+				 * intermediate position of the column. So every new 
+				 * intermediate column position triggers a delayed 
+				 * recalculation which is cancelled when there is another
+				 * column move during the next <delay> milliseconds.
+				 */
+				if (redrawRequest!=null) {
+					redrawRequest.cancel();
+				}
+				redrawRequest = new java.util.Timer();
+				redrawRequest.runAfter(delay) {
+					t2.sort();
+					updatePlots();
+					plots.each { it.redraw() };
+					jt2.repaint();
+				};
 			}));
 			
 			// Resizing is very awkward, this is the best way I could
@@ -1021,12 +1190,44 @@ assert v.getColumn(3).cardinality() == 1;
 	assert (1..col.length()).contains(col.cardinality()); 
 }
 
-/*
-p1 = new Plot(v.getColumn(0),v.getColumn(4));
-p2 = new Plot(v.getColumn(4),v.getColumn(5));
-p2 = new Plot(v.getColumn(0),v.getColumn(5));
-p3 = new Plot(v.getColumn(0),v.getColumn(1));
-*/
+t1 = new Table();
+t1.add(new SimpleColumn(t1, "c1", "c1", (String[])["a","b","a","c","a","a"]));
+t1.add(new SimpleColumn(t1, "c2", "c2", (String[])["b","b","a","d","b","d"]));
+t1.add(new SimpleColumn(t1, "c3", "c3", (String[])["a","b","c","a","b","d"]));
+t2 = new SortedTable(t1);
+t2.sort();
+assert t2.getValueAt(0,0) == "a";
+assert t2.getValueAt(1,0) == "a";
+assert t2.getValueAt(4,0) == "b";
+assert t2.getValueAt(5,0) == "c";
+assert t2.getValueAt(0,1) == "a";
+assert t2.getValueAt(1,1) == "b";
+assert t2.getValueAt(2,1) == "b";
+assert t2.getValueAt(4,1) == "b";
+assert t2.getValueAt(0,2) == "c";
+assert t2.getValueAt(1,2) == "a";
+assert t2.getValueAt(2,2) == "b";
+assert t2.getValueAt(2,2) == "b";
+assert t2.getValueAt(4,2) == "b";
+t3 = new RowFilteredTable(t2);
+t3.addFilter(0, (String[])["b"], false);
+t3.filter();
+assert t3.length()==5;
+0.upto(4) {
+	assert t3.getValueAt(it, 0) != "b";
+}
+assert t3.getValueAt(0,0) == "a";
+assert t3.getValueAt(1,0) == "a";
+assert t3.getValueAt(4,0) == "c";
+assert t3.getValueAt(0,1) == "a";
+assert t3.getValueAt(1,1) == "b";
+assert t3.getValueAt(2,1) == "b";
+assert t3.getValueAt(4,1) == "d";
+assert t3.getValueAt(0,2) == "c";
+assert t3.getValueAt(1,2) == "a";
+assert t3.getValueAt(2,2) == "b";
+assert t3.getValueAt(2,2) == "b";
+assert t3.getValueAt(4,2) == "a";
 
 v = new VdbenchExplorerGUI();
 
