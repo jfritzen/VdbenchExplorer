@@ -622,14 +622,14 @@ class Plot {
 	}	
 
 	void reinit(Column c1, Column c2) {
-		reinit(c1, c2, null);
-	}
-	
-	void reinit(Column c1, Column c2, Column[] g) {
 		this.cx = c1;
 		this.cy = c2;
-		this.groupby = g;
 		init();
+	}
+	
+	void reinit(Column c1, Column c2, Column g) {
+		this.groupby = g;
+		reinit(c1, c2);
 	}
 	
 	void groupby(Column g) {
