@@ -413,6 +413,7 @@ abstract class Column {
 	def d2l = [:], l2d = [:], symbols;
 	
 	abstract Cell getRow(int row);
+	abstract String[] getVals();
 	abstract void setRow(int row, Cell c);
 	abstract void add(Cell c);
 	abstract void removeAll();
@@ -481,6 +482,10 @@ class SimpleColumn extends Column {
 
 	Cell getRow(int row) {
 		return cells[row];
+	}
+
+	String[] getVals() {
+		return cells*.val;
 	}
 
 	int length() {
@@ -557,6 +562,14 @@ class ProxyColumn extends Column {
 		return realCol.getRow(table.virt2real(row));
 	}
 
+	String[] getVals() {
+		def vals = realCol.getVals();
+		def r = (0..length()-1).collect { table.virt2real(it) }.toList();
+		//println "V="+vals;
+		//println "R="+r;
+		return vals[r];
+	}
+
 	int length() {
 		return table.length();
 	}
@@ -566,11 +579,11 @@ class ProxyColumn extends Column {
 	}
 
 	int cardinality() {
-		return realCol.cardinality();
+		return getVals().toList().sort().unique().size();
 	}
 
 	String[] distinctVals() {
-		return realCol.distinctVals();
+		return (String[]) getVals().toList().sort().unique();
 	}
 
 	Type getColumnType() {
