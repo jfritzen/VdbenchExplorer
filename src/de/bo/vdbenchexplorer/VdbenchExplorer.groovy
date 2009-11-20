@@ -20,7 +20,7 @@ import jplot.*;
 
 enum Type { DATETIME, TIME, LABEL, INT, FLOAT };
 
-class Table implements TableModel {
+abstract class Table implements TableModel {
 	String name;
 	String description;
 	def cols=[];
@@ -64,6 +64,10 @@ class Table implements TableModel {
 		// Do nothing
 	}
 
+	// Additional abstract methods
+
+	abstract void update();
+	
 	// Own methods
 
 	void add(Column c) {
@@ -74,6 +78,15 @@ class Table implements TableModel {
 		return cols[col];
 	}
 
+	int getColumnNr(Column c) {
+		def ret=(0..(cols.size()-1)).find { cols[it] == c };
+		if (ret!=null) {
+			return ret;
+		} else {
+			return -1;
+		}
+	}
+
 	Cell[] getRow(int row) {
 		cols*.getRow(row).toList();
 	}
@@ -81,6 +94,10 @@ class Table implements TableModel {
 	Cell getCellAt(int row, int col) {
 		return cols[col].getRow(row);
 	}
+}
+
+class SimpleTable extends Table {
+	void update() {};
 }
 
 class VdbenchFlatfileTable extends Table {
@@ -116,6 +133,8 @@ class VdbenchFlatfileTable extends Table {
 		}
 		cols[0].columnHead.description="Time/s";
 	}
+
+	void update() {};
 }
 
 class SortedTable extends Table {
@@ -131,9 +150,15 @@ class SortedTable extends Table {
 	SortedTable(Table t, JTable jt) {
 		this.masterTable=t;
 		this.jt=jt;
-		def c;
 		name=t.name;
 		description=t.description;
+		init();
+	}
+
+	private void init() {
+		def c;
+		cols = [];
+		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
 		masterTable.cols.each { col ->
 			c = new ProxyColumn(this, col);
 			cols << c;
@@ -142,6 +167,11 @@ class SortedTable extends Table {
 		rowVirtToReal = 0..(c.length()-1);
 	}
 
+	void update() {
+		init();
+		sort();
+	}
+	
 	void setJTable(JTable jt) {
 		this.jt = jt;
 	}
@@ -248,6 +278,7 @@ class RowFilteredTable extends Table {
 	private def rowRealToVirt=[:];
 	private def rowVirtToReal=[:];
 	def closures=[];
+	def filters = [];
 
 	RowFilteredTable(Table t) {
 		this(t, null);
@@ -256,9 +287,15 @@ class RowFilteredTable extends Table {
 	RowFilteredTable(Table t, JTable jt) {
 		this.masterTable=t;
 		this.jt=jt;
-		def c;
 		name=t.name;
 		description=t.description;
+		init();
+	}
+
+	private void init() {
+		def c;
+		cols = [];
+		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
 		masterTable.cols.each { col ->
 			c = new ProxyColumn(this, col);
 			cols << c;
@@ -270,14 +307,36 @@ class RowFilteredTable extends Table {
 		println "v2r="+rowVirtToReal+" r2v="+rowRealToVirt;
 	}
 
+	void update() {
+		init();
+		applyFilters();
+	}
+	
 	void addFilter(int col, String[] vals, boolean inverse) {
-		closures << { row ->
+		def c = { row ->
 			def val = masterTable.getColumn(col).getRow(row).val;
 			boolean ret=vals.grep(val);
 			ret=inverse?!ret:ret;
 			println "row="+row+" val="+val+" ret="+ret+" vals="+vals;
 			return ret;
 		};
+		closures << c;
+		if (!filters[col]) { filters[col] = [] }
+		filters[col] << c;
+		return;
+	}
+
+	void addFilter(int col, String val, boolean inverse) {
+		def c = { row ->
+			boolean ret = (masterTable.getColumn(col).getRow(row).val == val);
+			ret=inverse?!ret:ret;
+			println "row="+row+" val="+val+" ret="+ret;
+			return ret;
+		};
+		closures << c
+		if (!filters[col]) { filters[col] = [] }
+		filters[col] << c;
+		return;
 	}
 
 	void removeFilter() {
@@ -288,26 +347,35 @@ class RowFilteredTable extends Table {
 		closures = [];
 	}
 
+	void removeColFilters(int col) {
+		filters[col].each {
+			closures.remove(it);
+		}
+		filters[col] = null;
+	}
+
 	int filterCount() {
 		return closures.size();
 	}
 	
 	boolean matches(int row) {
+		if (!closures) { return false; }
 		for(closure in closures) {
 			if (closure(row)) {
 				return true;
 			}
 		}
+		return false;
 	}
 	
-	void filter() {
+	void applyFilters() {
 		int row=0;
 		rowVirtToReal=[:];
 		rowRealToVirt=[:];
 		0.upto(masterTable.getColumn(0).length()-1) {
-			println "it="+it+" row="+row;
+			//println "it="+it+" row="+row;
 			if (!matches(it)) {
-				println masterTable.getRow(it).toString();
+				//println masterTable.getRow(it).toString();
 				rowVirtToReal[row]=it;
 				rowRealToVirt[it]=row;
 				row++;
@@ -524,13 +592,42 @@ class ProxyColumn extends Column {
 	HashMap getD2l() {
 		return realCol.d2l;
 	}
+
+	boolean isPlotted() {
+		return realCol.plotted;
+	}
+
+	void setPlotted(boolean t) {
+		realCol.plotted = t;
+	}
+	
+	boolean isGroupby() {
+		return realCol.groupby;
+	}
+
+	void setGroupby(boolean t) {
+		realCol.groupby = t;
+	}
+	
+	boolean isFiltered() {
+		if (table instanceof RowFilteredTable) {
+			int col = table.getColumnNr(this);
+			if (table.filters[col]!=null) {
+				return table.filters[col].size()>0;
+			} else {
+				return false;
+			}
+		} else {
+			return realCol.filtered;
+		}
+	}
 	
 	double[] getDoubles() {
 		def dr = realCol.getDoubles();
 		def dv = [];
-		0.upto(dr.size()-1) {
+		0.upto(length()-1) {
 			dv << dr[table.virt2real(it)];
-		};
+		}
 		return dv;
 	}
 
@@ -611,6 +708,7 @@ class Plot {
 	}	
 
 	Plot(Column c1, Column c2, Column g) {
+		assert c1.length() == c2.length();
 		this.cx = c1;
 		this.cy = c2;
 		this.groupby = g;
@@ -622,6 +720,7 @@ class Plot {
 	}	
 
 	void reinit(Column c1, Column c2) {
+		assert c1.length() == c2.length();
 		this.cx = c1;
 		this.cy = c2;
 		init();
@@ -836,20 +935,41 @@ class CustomHeaderRenderer extends DefaultTableCellRenderer
     		JTableHeader header = table.getTableHeader();
     		if (header != null) {
     	        int col=table.convertColumnIndexToModel(column);
+    	        
     			if (((Table)table.model).getColumn(col).plotted) {
     				if (((Table)table.model).getColumn(col).groupby) {
-        	        	setForeground(Color.YELLOW);
-            			setBackground(header.foreground);
+    					if (((Table)table.model).getColumn(col).filtered) {
+    						setForeground(Color.ORANGE);
+    						setBackground(header.foreground);
+    					} else {
+    						setForeground(Color.YELLOW);
+    						setBackground(header.foreground);    						
+    					}
     				} else {
-    					setForeground(header.background);
-    					setBackground(header.foreground);
+    					if (((Table)table.model).getColumn(col).filtered) {
+    						setForeground(Color.RED);
+    						setBackground(header.foreground);
+    					} else {
+    						setForeground(header.background);
+    						setBackground(header.foreground);    						
+    					}
     				}
     			} else if (((Table)table.model).getColumn(col).groupby) {
-    	        	setBackground(Color.YELLOW);
-        			setForeground(header.foreground);
+					if (((Table)table.model).getColumn(col).filtered) {
+						setBackground(Color.ORANGE);
+						setForeground(header.foreground);						
+					} else {
+						setBackground(Color.YELLOW);
+						setForeground(header.foreground);
+					}
     	        } else {
-    	        	setBackground(header.background);
-        			setForeground(header.foreground);
+					if (((Table)table.model).getColumn(col).filtered) {
+						setBackground(Color.RED);						
+						setForeground(header.foreground);
+					} else {
+						setBackground(header.background);
+						setForeground(header.foreground);
+					}
     	        }
     		}
     	}
@@ -906,6 +1026,33 @@ class JTable2 extends JTable {
 	}
 }
 
+class TableStack {
+	def tables = [];
+
+	void updateUpwardsFrom(Table t) {
+		int i = (0..(tables.size()-1)).find { tables[it] == t };
+		i.upto(tables.size()-1) {
+			tables[it].update();
+		}
+	}
+
+	void add(Table t) {
+		tables << t;
+	}
+
+	void add(Class c) {
+		tables << c.newInstance(tables[-1]);
+	}
+
+	Table top() {
+		return tables[-1];
+	}
+
+	Table findByClass(Class c) {
+		return tables.find { it.class == c };
+	}
+}
+
 class VdbenchExplorerGUI {
 	def swing;
 	def frame;
@@ -917,7 +1064,8 @@ class VdbenchExplorerGUI {
 	private int groupbylimit = 10;
 	private int delay = 500;
 	private java.util.Timer redrawRequest = null;
-	private def filter = null;
+	private RowFilteredTable filteredTable = null;
+	private TableStack ts = new TableStack();
 
     private final def exit;
     private final def open;
@@ -929,12 +1077,16 @@ class VdbenchExplorerGUI {
 		open = swing.action(name:'Open', closure:{
 			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 //			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
-			def t2 = new SortedTable(t1);
-			def t3 = new RowFilteredTable(t2);
-			jt2 = new JTable2(t3);
-			t2.setJTable(jt2);
-			filter = t3;
+
+			ts.add(t1);
+			ts.add(RowFilteredTable.class);
+			ts.add(SortedTable.class);
 			
+			jt2 = new JTable2(ts.top());
+			
+			ts.findByClass(SortedTable.class).setJTable(jt2);			
+			filteredTable = ts.findByClass(RowFilteredTable.class);
+
 			// Registering for right-clicks on the TableHeader
 			jt2.tableHeader.addMouseListener(new PopupListener({
 				// Find the column in which the MouseEvent was triggered
@@ -942,6 +1094,15 @@ class VdbenchExplorerGUI {
 				createPopupMenu(jt2.convertColumnIndexToModel(col)).
 					show((Component) it.getSource(), it.getX(), it.getY());
 			}));
+
+			jt2.addMouseListener(new PopupListener({
+				// Find the cell in which the MouseEvent was triggered
+				int row = jt2.rowAtPoint(it.point);
+				int col = jt2.convertColumnIndexToModel(
+						jt2.columnAtPoint(it.point));
+				createPopupMenuCell(row, col).
+					show((Component) it.getSource(), it.getX(), it.getY());
+			}))
 
 			jt2.columnModel.addColumnModelListener(new TCMListener({
 				/* When a column is dragged across the table we don't want
@@ -956,7 +1117,7 @@ class VdbenchExplorerGUI {
 				}
 				redrawRequest = new java.util.Timer();
 				redrawRequest.runAfter(delay) {
-					t2.sort();
+					ts.updateUpwardsFrom(ts.findByClass(SortedTable.class));
 					updatePlots();
 					plots.each { it.redraw() };
 					jt2.repaint();
@@ -995,6 +1156,33 @@ class VdbenchExplorerGUI {
 		frame.show();
 	}
 
+	JPopupMenu createPopupMenuCell(int row, int col) {
+		def popup = swing.popupMenu(id:"popupcell") {
+			menuItem() {
+				action(name:"Only this value", closure: {
+					filteredTable.addFilter(col,
+							jt2.model.getColumn(col).getRow(row).val, true);
+					println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
+					ts.updateUpwardsFrom(filteredTable);
+					jt2.repaint();
+					jt2.tableHeader.repaint();
+					updatePlots();
+				})
+			};
+			menuItem() {
+				action(name:"Exlude this value", closure: {
+					filteredTable.addFilter(col, 
+							jt2.model.getColumn(col).getRow(row).val, false);
+					println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
+					ts.updateUpwardsFrom(filteredTable);
+					jt2.repaint();
+					jt2.tableHeader.repaint();
+					updatePlots();
+				})
+			};
+		}
+	}
+	
 	JPopupMenu createPopupMenu(int col) {
 		def popup = swing.popupMenu(id:"popup") {
 			menuItem() {
@@ -1052,17 +1240,27 @@ class VdbenchExplorerGUI {
 						}
 					};
 
-					//updatePlots();
-					/* Tried out many things to instantly redraw the column 
+					/* Tried many things to instantly redraw the column 
 					 * headers: 
 					 * jt2.revalidate(), jt2.repaint()
 					 * 
 					 * Both worked but only after another mouse click.
-					 * The following works instantly.
+					 * Repainting jt2's TableHeader works instantly:
 					 */
 					jt2.tableHeader.repaint();
 				})
 			};
+			if (jt2.model.getColumn(col).filtered) {
+				menuItem() {
+					action(name:"Remove row filters for this column", closure: {
+						filteredTable.removeColFilters(col);
+						ts.updateUpwardsFrom(filteredTable);
+						jt2.repaint();
+						jt2.tableHeader.repaint();
+						updatePlots();
+					});
+				}
+			}
 		};		
 	}
 
@@ -1190,7 +1388,7 @@ assert v.getColumn(3).cardinality() == 1;
 	assert (1..col.length()).contains(col.cardinality()); 
 }
 
-t1 = new Table();
+t1 = new SimpleTable();
 t1.add(new SimpleColumn(t1, "c1", "c1", (String[])["a","b","a","c","a","a"]));
 t1.add(new SimpleColumn(t1, "c2", "c2", (String[])["b","b","a","d","b","d"]));
 t1.add(new SimpleColumn(t1, "c3", "c3", (String[])["a","b","c","a","b","d"]));
@@ -1211,7 +1409,8 @@ assert t2.getValueAt(2,2) == "b";
 assert t2.getValueAt(4,2) == "b";
 t3 = new RowFilteredTable(t2);
 t3.addFilter(0, (String[])["b"], false);
-t3.filter();
+t3.addFilter(0, "b", false);
+t3.applyFilters();
 assert t3.length()==5;
 0.upto(4) {
 	assert t3.getValueAt(it, 0) != "b";
