@@ -1,4 +1,6 @@
 package de.bo.vdbenchexplorer;
+
+import groovy.lang.GroovyShell;
 import groovy.swing.SwingBuilder;
 import java.util.regex.Matcher;
 import java.util.Date;
@@ -19,6 +21,22 @@ import javax.swing.event.TableModelListener;
 import jplot.*;
 
 enum Type { DATETIME, TIME, LABEL, INT, FLOAT };
+
+/* TODO: unsolved bugs
+ * - closing a plot window throws an exception
+ * Exception in thread "AWT-EventQueue-0" java.lang.NullPointerException: Cannot invoke method dispose() on null object
+ * ...
+ * at de.bo.vdbenchexplorer.Plot$1.windowClosing(VdbenchExplorer.groovy:809)
+ * - row filtering: removing all data leads to orphaned plot windows and an exception:
+ * Exception in thread "AWT-EventQueue-0" org.codehaus.groovy.runtime.InvokerInvocationException: groovy.lang.GroovyRuntimeException: Infinite loop in 0.upto(-1)
+ * ...
+ * at de.bo.vdbenchexplorer.ProxyColumn.getDoubles(VdbenchExplorer.groovy:641)
+ * - sometimes when moving columns an exception occurs:
+ * Exception in thread "AWT-EventQueue-0" java.lang.NullPointerException: Cannot invoke method getRow() on null object
+ * ...
+ * at de.bo.vdbenchexplorer.ProxyColumn$getRow.call(Unknown Source)
+ * at de.bo.vdbenchexplorer.Table.getValueAt(VdbenchExplorer.groovy:55)
+ */
 
 abstract class Table implements TableModel {
 	String name;
@@ -78,6 +96,10 @@ abstract class Table implements TableModel {
 		return cols[col];
 	}
 
+	Column getColumnByName(String name) {
+		return cols.find { it.columnHead.name == name };
+	}
+
 	int getColumnNr(Column c) {
 		def ret=(0..(cols.size()-1)).find { cols[it] == c };
 		if (ret!=null) {
@@ -102,9 +124,9 @@ class SimpleTable extends Table {
 
 class VdbenchFlatfileTable extends Table {
 	def h=[:], heads;
-	Matcher m;
 	
 	VdbenchFlatfileTable(String file) {
+		Matcher m;
 		String[] ls = new File(file).readLines();
 		def t=this;
 		ls.each {
@@ -115,7 +137,7 @@ class VdbenchFlatfileTable extends Table {
 		}
 		heads=ls.grep({it =~ /tod/})[0].split();
 		heads.each {
-			cols << new SimpleColumn(t, new ColumnHead(name:it, 
+			cols << new SimpleColumn(new ColumnHead(name:it, 
 					description:h[it]));
 		}
 		ls.each {
@@ -134,14 +156,14 @@ class VdbenchFlatfileTable extends Table {
 		cols[0].columnHead.description="Time/s";
 	}
 
+	// TODO: reinit VdbenchFlatfileTable
 	void update() {};
 }
 
 class SortedTable extends Table {
 	Table masterTable;
 	JTable jt=null;
-	private def rowRealToVirt;
-	private def rowVirtToReal;
+	RowMap rm;
 	
 	SortedTable(Table t) {
 		this(t, null);
@@ -158,13 +180,12 @@ class SortedTable extends Table {
 	private void init() {
 		def c;
 		cols = [];
+		rm = new RowMap(masterTable.cols[0].length());
 		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
 		masterTable.cols.each { col ->
-			c = new ProxyColumn(this, col);
+			c = new ProxyColumn(rm, col);
 			cols << c;
 		}
-		rowRealToVirt = 0..(c.length()-1);
-		rowVirtToReal = 0..(c.length()-1);
 	}
 
 	void update() {
@@ -242,21 +263,13 @@ class SortedTable extends Table {
 		}
 		//println "frP="+rowPermutation;
 		
-		rowVirtToReal = rowPermutation;
-		rowRealToVirt=[];
+		rm.virt2real = rowPermutation;
+		rm.real2virt = [];
 		(0..cols[0].length()-1).each {
-			rowRealToVirt[rowPermutation[it]]=it;
+			rm.real2virt[rowPermutation[it]]=it;
 		}
 		
 		return;
-	}
-
-	int real2virt(int row) {
-		return rowRealToVirt[row];
-	}
-	
-	int virt2real(int row) {
-		return rowVirtToReal[row];
 	}
 
 	int length() {
@@ -275,8 +288,7 @@ class SortedTable extends Table {
 class RowFilteredTable extends Table {
 	Table masterTable;
 	JTable jt=null;
-	private def rowRealToVirt=[:];
-	private def rowVirtToReal=[:];
+	RowMap rm;
 	def closures=[];
 	def filters = [];
 
@@ -295,16 +307,13 @@ class RowFilteredTable extends Table {
 	private void init() {
 		def c;
 		cols = [];
+		rm = new RowMap(masterTable.cols[0].length());
 		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
 		masterTable.cols.each { col ->
-			c = new ProxyColumn(this, col);
+			c = new ProxyColumn(rm, col);
 			cols << c;
 		}
-		0.upto(masterTable.cols[0].length()-1) {
-			rowRealToVirt[it]=it;
-			rowVirtToReal[it]=it;
-		}
-		println "v2r="+rowVirtToReal+" r2v="+rowRealToVirt;
+		println "v2r="+rm.virt2real+" r2v="+rm.real2virt;
 	}
 
 	void update() {
@@ -317,7 +326,7 @@ class RowFilteredTable extends Table {
 			def val = masterTable.getColumn(col).getRow(row).val;
 			boolean ret=vals.grep(val);
 			ret=inverse?!ret:ret;
-			println "row="+row+" val="+val+" ret="+ret+" vals="+vals;
+			//println "row="+row+" val="+val+" ret="+ret+" vals="+vals;
 			return ret;
 		};
 		closures << c;
@@ -330,7 +339,7 @@ class RowFilteredTable extends Table {
 		def c = { row ->
 			boolean ret = (masterTable.getColumn(col).getRow(row).val == val);
 			ret=inverse?!ret:ret;
-			println "row="+row+" val="+val+" ret="+ret;
+			//println "row="+row+" val="+val+" ret="+ret;
 			return ret;
 		};
 		closures << c
@@ -370,37 +379,69 @@ class RowFilteredTable extends Table {
 	
 	void applyFilters() {
 		int row=0;
-		rowVirtToReal=[:];
-		rowRealToVirt=[:];
+		rm.clear();
 		0.upto(masterTable.getColumn(0).length()-1) {
 			//println "it="+it+" row="+row;
 			if (!matches(it)) {
 				//println masterTable.getRow(it).toString();
-				rowVirtToReal[row]=it;
-				rowRealToVirt[it]=row;
+				rm.map(row, it);
 				row++;
 			}
 		}
-		println "v2r="+rowVirtToReal+" r2v="+rowRealToVirt;
-	}
-
-	int real2virt(int row) {
-		return rowRealToVirt[row];
-	}
-	
-	int virt2real(int row) {
-		return rowVirtToReal[row];
+		println "v2r="+rm.virt2real+" r2v="+rm.real2virt;
 	}
 
 	int length() {
-		return rowVirtToReal.keySet().size();
+		return rm.virt2real.size();
+	}
+}
+
+class ColumnFilteredTable extends Table {
+	Table masterTable;
+	
+	ColumnFilteredTable(Table t) {
+		this.masterTable = t;
+		this.name=t.name;
+		this.description=t.description;
+		init();
+	}
+
+	private void init() {
+		cols = [];
+		masterTable.cols.each { col ->
+			cols << col;
+		}
+	}
+
+	// Implement abstract method from Table
+	
+	void update() {
+		cols.each {
+			if (it instanceof SyntheticColumn) {
+				it.update();
+			}
+		}
+		init();
+	}
+
+	// Own methods
+
+	void addSyntheticColumn(Column[] baseCols, String expr) {
+		cols << new SyntheticColumn(baseCols, expr);
+	}
+
+	void removeColumn(Column col) {
+		cols.remove(col);
+	}
+
+	void removeColumn(int col) {
+		cols[col]=[];
 	}
 }
 
 abstract class Column {
 	private Type columnType = Type.LABEL;
 	ColumnHead columnHead;
-	Table table;
 	// masked is not in use currently
 	boolean masked = false;
 	// plotted: This column is to be plotted
@@ -417,9 +458,9 @@ abstract class Column {
 	abstract void setRow(int row, Cell c);
 	abstract void add(Cell c);
 	abstract void removeAll();
-	abstract Type guessType();
 	abstract int length();
 	abstract int cardinality();
+	abstract String[] distinctVals();
 	abstract double[] getDoubles();
 
 	static Type guessType(String[] l) {
@@ -455,14 +496,20 @@ abstract class Column {
 class SimpleColumn extends Column {
 	def cells=[];
 	
-	SimpleColumn(Table t, ColumnHead ch) {
+	SimpleColumn(ColumnHead ch) {
 		this.columnHead = ch;
-		this.table = t;
 	}
 
-	SimpleColumn(Table t, String head, String desc, String[] vals) {
+	SimpleColumn(String head, String desc, String[] vals) {
 		this.columnHead = new ColumnHead(name:head, description:desc);
-		this.table = t;
+		vals.each {
+			cells << new Cell(this, cells.size(), it);
+		}
+	}
+	
+	SimpleColumn(String head, String desc, Type type, String[] vals) {
+		this.columnHead = new ColumnHead(name:head, description:desc);
+		this.columnType = type;
 		vals.each {
 			cells << new Cell(this, cells.size(), it);
 		}
@@ -530,18 +577,12 @@ class SimpleColumn extends Column {
 }
 
 class ProxyColumn extends Column {
-	def table;
+	private RowMap rm;
 	private Column realCol;
 	
-	ProxyColumn(SortedTable t, Column c) {
+	ProxyColumn(RowMap rm, Column c) {
 		this.realCol = c;
-		this.table = t;
-		this.columnHead = c.columnHead;
-	}
-
-	ProxyColumn(RowFilteredTable t, Column c) {
-		this.realCol = c;
-		this.table = t;
+		this.rm = rm;
 		this.columnHead = c.columnHead;
 	}
 
@@ -555,23 +596,23 @@ class ProxyColumn extends Column {
 	}
 
 	void setRow(int row, Cell c) {
-		realCol.setRow(table.virt2real(row), c);
+		realCol.setRow(rm.virt2real(row), c);
 	}
 
 	Cell getRow(int row) {
-		return realCol.getRow(table.virt2real(row));
+		return realCol.getRow(rm.virt2real(row));
 	}
 
 	String[] getVals() {
 		def vals = realCol.getVals();
-		def r = (0..length()-1).collect { table.virt2real(it) }.toList();
+		def r = (0..length()-1).collect { rm.virt2real(it) }.toList();
 		//println "V="+vals;
 		//println "R="+r;
 		return vals[r];
 	}
 
 	int length() {
-		return table.length();
+		return rm.virt2real.size();
 	}
 
 	Type guessType() {
@@ -639,7 +680,7 @@ class ProxyColumn extends Column {
 		def dr = realCol.getDoubles();
 		def dv = [];
 		0.upto(length()-1) {
-			dv << dr[table.virt2real(it)];
+			dv << dr[rm.virt2real(it)];
 		}
 		return dv;
 	}
@@ -650,6 +691,97 @@ class ProxyColumn extends Column {
 	}
 
 
+}
+
+/* Create synthetic columns from other columns, using a closure
+ */
+class SyntheticColumn extends SimpleColumn {
+	Column[] baseColumns;
+	String formula;
+	Binding b;
+	GroovyShell gs;
+
+	SyntheticColumn(Column[] cols, String e) {
+		super(new ColumnHead(name:e, description:e));
+		assert cols.grep { it.length() != cols[0].length() }.size() == 0;
+		this.baseColumns = cols;
+		this.formula = e;
+		b = new Binding();
+		gs = new GroovyShell(b);
+		init();
+	}
+
+	private void init() {
+		String val;
+		0.upto(baseColumns[0].length()-1) { r ->
+			b.col = [:];
+			baseColumns.each { c -> 
+				b.col[c.columnHead.name]=c.getRow(r).getTypedVal();
+			}
+			/* GroovyShell does the hard work for us. Since GroovyShell
+			 * allows to excute any kind of code, this could be dangerous.
+			 * But nobody can force the user to enter harmful expressions, 
+			 * so this is safe. And harmful typos are very improbable.
+			 */
+			
+			val = gs.evaluate(formula).toString();
+			cells << new Cell(this, r, val); 
+		}
+		columnType=this.guessType();
+	}
+
+	void update() {
+		init();
+	}
+
+	// Overwritten methods
+	
+	void add(Cell c) {
+		throw(new Exception("You can not modify synthetic columns"));
+	}
+	
+	void setRow(int row, Cell c) {
+		throw(new Exception("You can not modify synthetic columns"));
+	}
+	
+	void removeAll() {
+		throw(new Exception("You can not modify synthetic columns"));
+	}
+}
+
+class RowMap {
+	def real2virt = [:];
+	def virt2real = [:];
+
+	RowMap() {}
+	
+	RowMap(int n) {
+		init(n);
+	}
+	
+	void init(int n) {
+		real2virt = 0..(n-1);
+		virt2real = 0..(n-1);
+	}
+	
+	int real2virt(int row) {
+		return real2virt[row];
+	}
+	
+	int virt2real(int row) {
+		return virt2real[row];
+	}
+
+	void map(int v, int r) {
+		virt2real[v]=r;
+		real2virt[r]=v;
+
+	}
+
+	void clear() {
+		real2virt = [:];
+		virt2real = [:];
+	}
 }
 
 class ColumnHead {
@@ -1041,6 +1173,7 @@ class JTable2 extends JTable {
 
 class TableStack {
 	def tables = [];
+	def t2 = [:]
 
 	void updateUpwardsFrom(Table t) {
 		int i = (0..(tables.size()-1)).find { tables[it] == t };
@@ -1053,14 +1186,29 @@ class TableStack {
 		tables << t;
 	}
 
+	void add(Table t, String name) {
+		t2[name] = t;
+		tables << t;
+	}
+
 	void add(Class c) {
 		tables << c.newInstance(tables[-1]);
+	}
+
+	void add(Class c, String name) {
+		def t = c.newInstance(tables[-1]);
+		t2[name] = t;
+		tables << t;
 	}
 
 	Table top() {
 		return tables[-1];
 	}
 
+	Table findByName(String s) {
+		return t2[s];
+	}
+	
 	Table findByClass(Class c) {
 		return tables.find { it.class == c };
 	}
@@ -1402,9 +1550,9 @@ assert v.getColumn(3).cardinality() == 1;
 }
 
 t1 = new SimpleTable();
-t1.add(new SimpleColumn(t1, "c1", "c1", (String[])["a","b","a","c","a","a"]));
-t1.add(new SimpleColumn(t1, "c2", "c2", (String[])["b","b","a","d","b","d"]));
-t1.add(new SimpleColumn(t1, "c3", "c3", (String[])["a","b","c","a","b","d"]));
+t1.add(new SimpleColumn("c1", "c1", (String[])["a","b","a","c","a","a"]));
+t1.add(new SimpleColumn("c2", "c2", (String[])["b","b","a","d","b","d"]));
+t1.add(new SimpleColumn("c3", "c3", (String[])["a","b","c","a","b","d"]));
 t2 = new SortedTable(t1);
 t2.sort();
 assert t2.getValueAt(0,0) == "a";
@@ -1421,7 +1569,6 @@ assert t2.getValueAt(2,2) == "b";
 assert t2.getValueAt(2,2) == "b";
 assert t2.getValueAt(4,2) == "b";
 t3 = new RowFilteredTable(t2);
-t3.addFilter(0, (String[])["b"], false);
 t3.addFilter(0, "b", false);
 t3.applyFilters();
 assert t3.length()==5;
@@ -1440,6 +1587,21 @@ assert t3.getValueAt(1,2) == "a";
 assert t3.getValueAt(2,2) == "b";
 assert t3.getValueAt(2,2) == "b";
 assert t3.getValueAt(4,2) == "a";
+
+t1 = new SimpleTable();
+t1.add(new SimpleColumn("c1", "c1", Type.INT, (String[])["0","1","0","2","0","0"]));
+t1.add(new SimpleColumn("c2", "c2", Type.INT, (String[])["1","1","0","3","1","3"]));
+t1.add(new SimpleColumn("c3", "c3", Type.INT, (String[])["0","1","2","0","1","3"]));
+ts = new TableStack();
+ts.add(t1);
+ts.add(ColumnFilteredTable.class);
+t2=ts.findByClass(ColumnFilteredTable.class);
+t2.addSyntheticColumn((Column[])[t1.getColumnByName("c1"), t1.getColumnByName("c2")], "col['c1']+col['c2']");
+assert t2.getValueAt(3,0) == 2;
+assert t2.getValueAt(4,1) == 1; 
+assert t2.getValueAt(0,3) == 1;
+assert t2.getValueAt(1,3) == 2;
+assert t2.getValueAt(3,3) == 5;
 
 v = new VdbenchExplorerGUI();
 
