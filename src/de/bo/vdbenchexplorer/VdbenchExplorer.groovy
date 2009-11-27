@@ -116,6 +116,10 @@ abstract class Table implements TableModel {
 	Cell getCellAt(int row, int col) {
 		return cols[col].getRow(row);
 	}
+
+	String[] boringColumns() {
+		return (String[])[];
+	}
 }
 
 class SimpleTable extends Table {
@@ -158,6 +162,12 @@ class VdbenchFlatfileTable extends Table {
 
 	// TODO: reinit VdbenchFlatfileTable
 	void update() {};
+
+	String[] boringColumns() {
+		def list = [ "reqrate", "xfersize", "lunsize", "version", "ks_rate", 
+		             "ks_resp", "ks_svct", "ks_mb", "ks_read%", "ks_bytes" ];
+		return list;
+	}
 }
 
 class SortedTable extends Table {
@@ -290,7 +300,7 @@ class RowFilteredTable extends Table {
 	JTable jt=null;
 	RowMap rm;
 	def closures=[];
-	def filters = [];
+	def filters=[];
 
 	RowFilteredTable(Table t) {
 		this(t, null);
@@ -310,8 +320,10 @@ class RowFilteredTable extends Table {
 		rm = new RowMap(masterTable.cols[0].length());
 		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
 		masterTable.cols.each { col ->
-			c = new ProxyColumn(rm, col);
+			c = new RowFilteredColumn(rm, col);
 			cols << c;
+			if (!filters[cols.size()-1]) { filters[cols.size()-1] = [] };
+			c.filtered=(filters[cols.size()-1].size()>0);
 		}
 		println "v2r="+rm.virt2real+" r2v="+rm.real2virt;
 	}
@@ -330,8 +342,8 @@ class RowFilteredTable extends Table {
 			return ret;
 		};
 		closures << c;
-		if (!filters[col]) { filters[col] = [] }
 		filters[col] << c;
+		cols[col].filtered = true;
 		return;
 	}
 
@@ -343,24 +355,24 @@ class RowFilteredTable extends Table {
 			return ret;
 		};
 		closures << c
-		if (!filters[col]) { filters[col] = [] }
 		filters[col] << c;
+		cols[col].filtered = true;
 		return;
-	}
-
-	void removeFilter() {
-		closures.pop();
 	}
 
 	void removeAllFilters() {
 		closures = [];
+		cols.each { it.filter = [] };
+		filters = [];
+		cols.each { it.filtered = false }
 	}
 
 	void removeColFilters(int col) {
 		filters[col].each {
 			closures.remove(it);
 		}
-		filters[col] = null;
+		filters[col] = [];
+		cols[col].filtered = false;
 	}
 
 	int filterCount() {
@@ -398,6 +410,7 @@ class RowFilteredTable extends Table {
 
 class ColumnFilteredTable extends Table {
 	Table masterTable;
+	def removed = [];
 	
 	ColumnFilteredTable(Table t) {
 		this.masterTable = t;
@@ -431,10 +444,20 @@ class ColumnFilteredTable extends Table {
 	}
 
 	void removeColumn(Column col) {
+		removed << col;
 		cols.remove(col);
 	}
 
+	void removeColumnsByNames(String[] names) {
+		def l;
+		names.each { name ->
+			l = cols.findAll { it.columnHead.name == name };
+			l.each { cols.remove(it) }
+		}
+	}
+	
 	void removeColumn(int col) {
+		removed << cols[col];
 		cols[col]=[];
 	}
 }
@@ -577,8 +600,8 @@ class SimpleColumn extends Column {
 }
 
 class ProxyColumn extends Column {
-	private RowMap rm;
-	private Column realCol;
+	protected RowMap rm;
+	protected Column realCol;
 	
 	ProxyColumn(RowMap rm, Column c) {
 		this.realCol = c;
@@ -664,16 +687,7 @@ class ProxyColumn extends Column {
 	}
 	
 	boolean isFiltered() {
-		if (table instanceof RowFilteredTable) {
-			int col = table.getColumnNr(this);
-			if (table.filters[col]!=null) {
-				return table.filters[col].size()>0;
-			} else {
-				return false;
-			}
-		} else {
-			return realCol.filtered;
-		}
+		return realCol.filtered;
 	}
 	
 	double[] getDoubles() {
@@ -689,8 +703,14 @@ class ProxyColumn extends Column {
 	Cell getRealRow(int row) {
 		return realCol.getRow(row);
 	}
+}
 
-
+class RowFilteredColumn extends ProxyColumn {
+	boolean filtered = false;
+	
+	RowFilteredColumn(RowMap rm, Column c) {
+		super(rm, c);
+	}
 }
 
 /* Create synthetic columns from other columns, using a closure
@@ -840,6 +860,7 @@ class Plot {
 	 * If null do not use groupby;
 	 */
 	Column groupby = null;
+	String description = null;
 
 	// Makes no sense, do not use
 	Plot() {
@@ -934,7 +955,7 @@ class Plot {
 			gs.setDrawTicLabels(GraphSettings.Y_AXIS, true);
 		}		
 
-		plotFrame.title=(cx.table.description!=null)?cx.table.description:\
+		plotFrame.title=(description!=null) ? description :
 				cx.columnHead.name+" - "+cy.columnHead.name;
 		plotFrame.addWindowListener(new WindowAdapter() {
 		    public void windowClosing(WindowEvent e) {
@@ -1225,7 +1246,6 @@ class VdbenchExplorerGUI {
 	private int groupbylimit = 10;
 	private int delay = 500;
 	private java.util.Timer redrawRequest = null;
-	private RowFilteredTable filteredTable = null;
 	private TableStack ts = new TableStack();
 
     private final def exit;
@@ -1236,17 +1256,20 @@ class VdbenchExplorerGUI {
 
 		exit = swing.action(name:'Exit', closure:{System.exit(0)});
 		open = swing.action(name:'Open', closure:{
-			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 //			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 
-			ts.add(t1);
-			ts.add(RowFilteredTable.class);
-			ts.add(SortedTable.class);
+			ts.add(t1, "Base");
+			ts.add(ColumnFilteredTable.class, "Boring");
+			ts.findByName("Boring").
+				removeColumnsByNames(ts.findByName("Base").boringColumns());
+			ts.add(RowFilteredTable.class, "RowFilter");
+			ts.add(SortedTable.class, "Sorter");
+			ts.add(ColumnFilteredTable.class, "Synthetic");
 			
 			jt2 = new JTable2(ts.top());
 			
-			ts.findByClass(SortedTable.class).setJTable(jt2);			
-			filteredTable = ts.findByClass(RowFilteredTable.class);
+			ts.findByName("Sorter").setJTable(jt2);
 
 			// Registering for right-clicks on the TableHeader
 			jt2.tableHeader.addMouseListener(new PopupListener({
@@ -1318,13 +1341,14 @@ class VdbenchExplorerGUI {
 	}
 
 	JPopupMenu createPopupMenuCell(int row, int col) {
+		def fT = ts.findByName("RowFilter");
 		def popup = swing.popupMenu(id:"popupcell") {
 			menuItem() {
 				action(name:"Only this value", closure: {
-					filteredTable.addFilter(col,
+					fT.addFilter(col,
 							jt2.model.getColumn(col).getRow(row).val, true);
 					println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
-					ts.updateUpwardsFrom(filteredTable);
+					ts.updateUpwardsFrom(fT);
 					jt2.repaint();
 					jt2.tableHeader.repaint();
 					updatePlots();
@@ -1332,10 +1356,10 @@ class VdbenchExplorerGUI {
 			};
 			menuItem() {
 				action(name:"Exlude this value", closure: {
-					filteredTable.addFilter(col, 
+					fT.addFilter(col, 
 							jt2.model.getColumn(col).getRow(row).val, false);
 					println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
-					ts.updateUpwardsFrom(filteredTable);
+					ts.updateUpwardsFrom(fT);
 					jt2.repaint();
 					jt2.tableHeader.repaint();
 					updatePlots();
@@ -1413,9 +1437,10 @@ class VdbenchExplorerGUI {
 			};
 			if (jt2.model.getColumn(col).filtered) {
 				menuItem() {
+					def fT = ts.findByName("RowFilter");
 					action(name:"Remove row filters for this column", closure: {
-						filteredTable.removeColFilters(col);
-						ts.updateUpwardsFrom(filteredTable);
+						fT.removeColFilters(col);
+						ts.updateUpwardsFrom(fT);
 						jt2.repaint();
 						jt2.tableHeader.repaint();
 						updatePlots();
@@ -1572,7 +1597,7 @@ t3 = new RowFilteredTable(t2);
 t3.addFilter(0, "b", false);
 t3.applyFilters();
 assert t3.length()==5;
-0.upto(4) {
+0.upto(t3.length()-1) {
 	assert t3.getValueAt(it, 0) != "b";
 }
 assert t3.getValueAt(0,0) == "a";
