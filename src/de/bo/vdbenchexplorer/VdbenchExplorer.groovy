@@ -737,20 +737,28 @@ class SyntheticColumn extends SimpleColumn {
 	}
 
 	private void init() {
-		String val;
-		0.upto(baseColumns[0].length()-1) { r ->
-			b.col = [:];
-			baseColumns.each { c -> 
-				b.col[c.columnHead.name]=c.getRow(r).getTypedVal();
+		def vals;
+		def expr = formula.replaceAll(/\'(.*?)\'/, /col['$1'][it]/);
+		def expr2 = "(0.."+(baseColumns[0].length()-1)+
+			").collect { $expr }";
+		//println formula+" - "+expr+" - "+expr2;
+		b.col=[:];
+		baseColumns.each { c ->
+			b.col[c.columnHead.name]=[];
+			0.upto(c.length()-1) { r -> 
+				b.col[c.columnHead.name][r]=c.getRow(r).getTypedVal();
 			}
-			/* GroovyShell does the hard work for us. Since GroovyShell
-			 * allows to excute any kind of code, this could be dangerous.
-			 * But nobody can force the user to enter harmful expressions, 
-			 * so this is safe. And harmful typos are very improbable.
-			 */
-			
-			val = gs.evaluate(formula).toString();
-			cells << new Cell(this, r, val); 
+		}
+		//println "b="+b.col;
+		/* GroovyShell does the hard work for us. Since GroovyShell
+		 * allows to excute any kind of code, this could be dangerous.
+		 * But nobody can force the user to enter harmful expressions, 
+		 * so this is safe. And harmful typos are very improbable.
+		 */
+		vals = gs.evaluate(expr2)*.toString();
+		//println vals;
+		vals.each {
+			cells << new Cell(this, cells.size(), it);
 		}
 		columnType=this.guessType();
 	}
@@ -1284,12 +1292,12 @@ class VdbenchExplorerGUI {
 			ts.add(t1, "Base");
 			ts.add(ColumnFilteredTable.class, "Synthetic");
 			ts.findByName("Synthetic").
-			addSyntheticColumn((String[])
-				["threads", "MB/sec"], "col['MB/sec']/col['threads']"
+				addSyntheticColumn((String[])
+						["threads", "MB/sec"], "'MB/sec'/'threads'"
 			);
 			ts.findByName("Synthetic").
 				addSyntheticColumn((String[])
-					["threads", "rate"], "col['rate']/col['threads']"
+					["threads", "rate"], "'rate'/'threads'"
 				);
 			ts.findByName("Synthetic").
 				removeColumnsByNames(ts.findByName("Base").boringColumns());
@@ -1653,8 +1661,8 @@ ts = new TableStack();
 ts.add(t1);
 ts.add(ColumnFilteredTable.class);
 t2=ts.findByClass(ColumnFilteredTable.class);
-t2.addSyntheticColumn((Column[])[t1.getColumnByName("c1"), t1.getColumnByName("c2")], "col['c1']+col['c2']");
-t2.addSyntheticColumn((String[])["c2", "c3"], "col['c2']*col['c3']");
+t2.addSyntheticColumn((Column[])[t1.getColumnByName("c1"), t1.getColumnByName("c2")], "'c1'+'c2'");
+t2.addSyntheticColumn((String[])["c2", "c3"], "'c2'*'c3'");
 assert t2.getValueAt(3,0) == 2;
 assert t2.getValueAt(4,1) == 1; 
 assert t2.getValueAt(0,3) == 1;
