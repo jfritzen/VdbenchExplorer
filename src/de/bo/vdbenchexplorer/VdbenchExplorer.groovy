@@ -184,13 +184,14 @@ class SortedTable extends Table {
 		this.jt=jt;
 		name=t.name;
 		description=t.description;
+		rm = new RowMap();
 		init();
 	}
 
 	private void init() {
 		def c;
 		cols = [];
-		rm = new RowMap(masterTable.cols[0].length());
+		rm.init(masterTable.cols[0].length());
 		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
 		masterTable.cols.each { col ->
 			c = new ProxyColumn(rm, col);
@@ -311,13 +312,14 @@ class RowFilteredTable extends Table {
 		this.jt=jt;
 		name=t.name;
 		description=t.description;
+		rm = new RowMap();
 		init();
 	}
 
 	private void init() {
 		def c;
 		cols = [];
-		rm = new RowMap(masterTable.cols[0].length());
+		rm.init(masterTable.cols[0].length());
 		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
 		masterTable.cols.each { col ->
 			c = new RowFilteredColumn(rm, col);
@@ -439,6 +441,11 @@ class ColumnFilteredTable extends Table {
 
 	// Own methods
 
+	void addSyntheticColumn(String[] names, String expr) {
+		def c = names.collect { masterTable.getColumnByName(it) };
+		addSyntheticColumn((Column[])c, expr);
+	}
+
 	void addSyntheticColumn(Column[] baseCols, String expr) {
 		cols << new SyntheticColumn(baseCols, expr);
 	}
@@ -465,8 +472,6 @@ class ColumnFilteredTable extends Table {
 abstract class Column {
 	private Type columnType = Type.LABEL;
 	ColumnHead columnHead;
-	// masked is not in use currently
-	boolean masked = false;
 	// plotted: This column is to be plotted
 	boolean plotted = false;
 	/* groupby: Plot several curves discriminated by the values in this column
@@ -767,6 +772,12 @@ class SyntheticColumn extends SimpleColumn {
 	void removeAll() {
 		throw(new Exception("You can not modify synthetic columns"));
 	}
+
+	boolean isFiltered() {
+		// Since this is a new column, it is never row filtered. 
+		return false;
+	}	
+
 }
 
 class RowMap {
@@ -957,12 +968,10 @@ class Plot {
 
 		plotFrame.title=(description!=null) ? description :
 				cx.columnHead.name+" - "+cy.columnHead.name;
-		plotFrame.addWindowListener(new WindowAdapter() {
-		    public void windowClosing(WindowEvent e) {
+		plotFrame.addWindowListener(new WindowAdapter2({
 		      plotFrame.dispose();
 		      plotFrame = null;
-		    }
-		  });
+		}));
 
 		def da = [];
 		if (groupby!=null) {
@@ -970,6 +979,7 @@ class Plot {
 			groupby.distinctVals().each { val ->
 				def points = [];
 				DataArray d = new DataArray();
+				//println "groupby="+groupby.getVals();
 				0.upto(cx.length()-1) {
 					if (groupby.getRow(it).val==val) {
 						//println it+" "+x[it]+" "+y[it]+" "+" "+groupby.getRow(it).val+" "+val;
@@ -1039,6 +1049,18 @@ class ResizeListener extends ComponentAdapter {
 		// Don't forget the parantheses!
 		closure();
     }
+}
+
+class WindowAdapter2 extends WindowAdapter {
+	Closure closure;
+
+	WindowAdapter2(Closure c) {
+		closure=c;
+	}
+
+	void windowClosing(WindowEvent e) {
+		closure(e);
+	}
 }
 
 class PopupListener extends MouseAdapter {
@@ -1256,20 +1278,30 @@ class VdbenchExplorerGUI {
 
 		exit = swing.action(name:'Exit', closure:{System.exit(0)});
 		open = swing.action(name:'Open', closure:{
-//			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+//			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 
 			ts.add(t1, "Base");
-			ts.add(ColumnFilteredTable.class, "Boring");
-			ts.findByName("Boring").
+			ts.add(ColumnFilteredTable.class, "Synthetic");
+			ts.findByName("Synthetic").
+			addSyntheticColumn((String[])
+				["threads", "MB/sec"], "col['MB/sec']/col['threads']"
+			);
+			ts.findByName("Synthetic").
+				addSyntheticColumn((String[])
+					["threads", "rate"], "col['rate']/col['threads']"
+				);
+			ts.findByName("Synthetic").
 				removeColumnsByNames(ts.findByName("Base").boringColumns());
 			ts.add(RowFilteredTable.class, "RowFilter");
 			ts.add(SortedTable.class, "Sorter");
-			ts.add(ColumnFilteredTable.class, "Synthetic");
 			
 			jt2 = new JTable2(ts.top());
 			
 			ts.findByName("Sorter").setJTable(jt2);
+
+			
+			
 
 			// Registering for right-clicks on the TableHeader
 			jt2.tableHeader.addMouseListener(new PopupListener({
@@ -1527,7 +1559,7 @@ class VdbenchExplorerGUI {
 				if (reuse.size>0) {
 					//println "reuse plot";
 					//println "adding "+xcol+" "+ycol;
-					reuse[0].reinit(xcol, ycol);
+					reuse[0].reinit(xcol, ycol, groupby);
 					//println "cx, cy="+reuse[0].cx+" "+reuse[0].cy;
 					plots << reuse[0];
 					reuse.remove(0);
@@ -1622,11 +1654,15 @@ ts.add(t1);
 ts.add(ColumnFilteredTable.class);
 t2=ts.findByClass(ColumnFilteredTable.class);
 t2.addSyntheticColumn((Column[])[t1.getColumnByName("c1"), t1.getColumnByName("c2")], "col['c1']+col['c2']");
+t2.addSyntheticColumn((String[])["c2", "c3"], "col['c2']*col['c3']");
 assert t2.getValueAt(3,0) == 2;
 assert t2.getValueAt(4,1) == 1; 
 assert t2.getValueAt(0,3) == 1;
 assert t2.getValueAt(1,3) == 2;
 assert t2.getValueAt(3,3) == 5;
+assert t2.getValueAt(0,4) == 0;
+assert t2.getValueAt(1,4) == 1;
+assert t2.getValueAt(5,4) == 9;
 
 v = new VdbenchExplorerGUI();
 
