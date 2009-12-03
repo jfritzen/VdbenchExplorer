@@ -9,6 +9,7 @@ import java.awt.event.*;
 import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.plaf.UIResource;
+import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.JTableHeader;
 import javax.swing.table.TableCellRenderer;
@@ -17,6 +18,7 @@ import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
 import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
+import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import jplot.*;
 
@@ -36,13 +38,19 @@ enum Type { DATETIME, TIME, LABEL, INT, FLOAT };
  * ...
  * at de.bo.vdbenchexplorer.ProxyColumn$getRow.call(Unknown Source)
  * at de.bo.vdbenchexplorer.Table.getValueAt(VdbenchExplorer.groovy:55)
+ * - When adding or removing columns the column order is reset to the default.
+ * This can be annoying, we need to save the column order somehow.
  */
 
-abstract class Table implements TableModel {
+abstract class Table extends AbstractTableModel {
 	String name;
 	String description;
 	def cols=[];
 
+	Table() {
+		super();
+	}
+	
 	// TableModel methods
 	
 	int getColumnCount() {
@@ -74,14 +82,6 @@ abstract class Table implements TableModel {
 		return cols[col].getRow(0).getTypedVal().class;
 	}
 	
-	void addTableModelListener(TableModelListener l) {
-		// Do nothing
-	}
-
-	void removeTableModelListener(TableModelListener l) {
-		// Do nothing
-	}
-
 	// Additional abstract methods
 
 	abstract void update();
@@ -130,6 +130,7 @@ class VdbenchFlatfileTable extends Table {
 	def h=[:], heads;
 	
 	VdbenchFlatfileTable(String file) {
+		super();
 		Matcher m;
 		String[] ls = new File(file).readLines();
 		def t=this;
@@ -180,6 +181,7 @@ class SortedTable extends Table {
 	}
 
 	SortedTable(Table t, JTable jt) {
+		super();
 		this.masterTable=t;
 		this.jt=jt;
 		name=t.name;
@@ -308,6 +310,7 @@ class RowFilteredTable extends Table {
 	}
 
 	RowFilteredTable(Table t, JTable jt) {
+		super();
 		this.masterTable=t;
 		this.jt=jt;
 		name=t.name;
@@ -327,7 +330,7 @@ class RowFilteredTable extends Table {
 			if (!filters[cols.size()-1]) { filters[cols.size()-1] = [] };
 			c.filtered=(filters[cols.size()-1].size()>0);
 		}
-		println "v2r="+rm.virt2real+" r2v="+rm.real2virt;
+		//println "v2r="+rm.virt2real+" r2v="+rm.real2virt;
 	}
 
 	void update() {
@@ -369,12 +372,21 @@ class RowFilteredTable extends Table {
 		cols.each { it.filtered = false }
 	}
 
-	void removeColFilters(int col) {
-		filters[col].each {
-			closures.remove(it);
+	void removeColFilters(String name) {
+		def c = cols.findIndexOf { it.columnHead.name == name };
+		if (c>=0) {
+			removeColFilters(c);
 		}
-		filters[col] = [];
-		cols[col].filtered = false;
+	}
+
+	void removeColFilters(int col) {
+		if (filters[col]) {
+			filters[col].each {
+				closures.remove(it);
+			}
+			filters[col] = [];
+			cols[col].filtered = false;
+		}
 	}
 
 	int filterCount() {
@@ -402,7 +414,7 @@ class RowFilteredTable extends Table {
 				row++;
 			}
 		}
-		println "v2r="+rm.virt2real+" r2v="+rm.real2virt;
+		//println "v2r="+rm.virt2real+" r2v="+rm.real2virt;
 	}
 
 	int length() {
@@ -413,18 +425,32 @@ class RowFilteredTable extends Table {
 class ColumnFilteredTable extends Table {
 	Table masterTable;
 	def removed = [];
+	def synthetic = [];
 	
 	ColumnFilteredTable(Table t) {
+		super();
 		this.masterTable = t;
 		this.name=t.name;
 		this.description=t.description;
+		cols = masterTable.cols;
 		init();
 	}
 
 	private void init() {
+		def c1;
+		def c2 = cols;
 		cols = [];
-		masterTable.cols.each { col ->
-			cols << col;
+		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
+		c2.each { col ->
+			c1 = masterTable.cols.find { 
+				it.columnHead.name == col.columnHead.name 
+			};
+			if (c1) { cols << c1 } else {
+				c1 = synthetic.find {
+					it.columnHead.name == col.columnHead.name	
+				}
+				if (c1) { cols << c1 }
+			}			
 		}
 	}
 
@@ -441,31 +467,38 @@ class ColumnFilteredTable extends Table {
 
 	// Own methods
 
-	void addSyntheticColumn(String[] names, String expr) {
-		def c = names.collect { masterTable.getColumnByName(it) };
-		addSyntheticColumn((Column[])c, expr);
+	void addSyntheticColumn(String expr) {
+		def c = [];
+		expr.eachMatch(/\'(.*?)\'/) { match ->
+					c << masterTable.getColumnByName(match[1]); 
+		};
+		addSyntheticColumn((Column[]) c, expr);
 	}
 
 	void addSyntheticColumn(Column[] baseCols, String expr) {
-		cols << new SyntheticColumn(baseCols, expr);
+		def c = new SyntheticColumn(baseCols, expr);
+		synthetic << c;
+		cols << c;
 	}
 
 	void removeColumn(Column col) {
-		removed << col;
-		cols.remove(col);
+		//println "remove "+col.columnHead.name;
+		def realcol = cols.find { it.columnHead.name == col.columnHead.name }
+		removed << realcol;
+		cols.remove(realcol);
+		synthetic.remove(realcol);
 	}
 
 	void removeColumnsByNames(String[] names) {
 		def l;
 		names.each { name ->
 			l = cols.findAll { it.columnHead.name == name };
-			l.each { cols.remove(it) }
+			l.each { removeColumn(it) }
 		}
 	}
 	
 	void removeColumn(int col) {
-		removed << cols[col];
-		cols[col]=[];
+		removeColumn(cols[col]);
 	}
 }
 
@@ -1131,7 +1164,7 @@ class CustomHeaderRenderer extends DefaultTableCellRenderer
     		JTableHeader header = table.getTableHeader();
     		if (header != null) {
     	        int col=table.convertColumnIndexToModel(column);
-    	        
+
     			if (((Table)table.model).getColumn(col).plotted) {
     				if (((Table)table.model).getColumn(col).groupby) {
     					if (((Table)table.model).getColumn(col).filtered) {
@@ -1182,26 +1215,38 @@ class CustomHeaderRenderer extends DefaultTableCellRenderer
  */
 
 class JTable2 extends JTable {
-	int margin = 5;
-	TableModel tm;
+	private int margin = 5;
+	private boolean ready_for_init=false;
+	private CustomHeaderRenderer tcr;
 
 	JTable2(TableModel tm) {
 		super(tm);
-		this.tm = tm;
+		tcr = new CustomHeaderRenderer();
+		ready_for_init=true;
+		init();
+	}
+
+	private void init() {
+		if (!ready_for_init) { return; }
+		
 		this.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-		def tcr = new CustomHeaderRenderer();
-		
-		0.upto(tm.columnCount-1) { col ->
-			this.getColumnModel().getColumn(col).preferredWidth=
-				this.columnWidth(col);
-			this.getColumnModel().getColumn(col).headerRenderer=tcr;
+
+		0.upto(this.model.columnCount-1) { col ->
+			if (col < this.columnModel.columnCount) {
+				this.columnModel.getColumn(col).preferredWidth=
+					this.columnWidth(col);
+				this.columnModel.getColumn(col).headerRenderer=tcr;
+			}
 		}
-		
+	}
+
+	void reinit() {
+		init();
 	}
 
 	int columnWidth(int col) {
 		int w = 0;
-		def tc = this.getColumnModel().getColumn(col);
+		def tc = this.columnModel.getColumn(col);
 
 		// TODO: What is the equivalent of prepareRenderer for the header?
 		// new JTableHeader(tcm).getHeaderRect(col) ?
@@ -1211,16 +1256,31 @@ class JTable2 extends JTable {
 		}
 		w = Math.max(w, r.preferredSize.width);
 		
-		0.upto(tm.rowCount-1) { row ->
-			def tcr = this.getCellRenderer(row, col);
-			this.prepareRenderer(tcr, row, col);
-			def wc = tcr.preferredSize.width;
+		0.upto(this.model.rowCount-1) { row ->
+			def tcr2 = this.getCellRenderer(row, col);
+			this.prepareRenderer(tcr2, row, col);
+			def wc = tcr2.preferredSize.width;
 			w = Math.max(w, wc);
 		}
 		
 		return w+2*margin;
 	}
-}
+
+/*	void columnAdded(TableColumnModelEvent e) {
+		println "atcme="+e;
+		super.columnAdded(e);
+	}
+
+	void columnRemoved(TableColumnModelEvent e) {
+		println "rtcme="+e;
+		super.columnRemoved(e);
+	}
+
+	void tableChanged(TableModelEvent e) {
+		println "tme="+e;
+		super.tableChanged(e);
+	}
+*/}
 
 class TableStack {
 	def tables = [];
@@ -1280,6 +1340,8 @@ class VdbenchExplorerGUI {
 
     private final def exit;
     private final def open;
+    private final def syntheticcolumn;
+    private final def removecolumn;
     
 	VdbenchExplorerGUI() {
 		swing = new SwingBuilder();
@@ -1292,24 +1354,14 @@ class VdbenchExplorerGUI {
 			ts.add(t1, "Base");
 			ts.add(ColumnFilteredTable.class, "Synthetic");
 			ts.findByName("Synthetic").
-				addSyntheticColumn((String[])
-						["threads", "MB/sec"], "'MB/sec'/'threads'"
-			);
-			ts.findByName("Synthetic").
-				addSyntheticColumn((String[])
-					["threads", "rate"], "'rate'/'threads'"
-				);
-			ts.findByName("Synthetic").
 				removeColumnsByNames(ts.findByName("Base").boringColumns());
 			ts.add(RowFilteredTable.class, "RowFilter");
 			ts.add(SortedTable.class, "Sorter");
 			
 			jt2 = new JTable2(ts.top());
+			//jt2.setAutoCreateColumnsFromModel(false);
 			
 			ts.findByName("Sorter").setJTable(jt2);
-
-			
-			
 
 			// Registering for right-clicks on the TableHeader
 			jt2.tableHeader.addMouseListener(new PopupListener({
@@ -1362,6 +1414,21 @@ class VdbenchExplorerGUI {
 			swing.panel.add(jsp, BorderLayout.CENTER);
 			frame.pack();
 		});
+		
+		syntheticcolumn = swing.action(name:'Synthetic column', closure:{
+				def formula = JOptionPane.showInputDialog(null, 
+						"Please enter formula", 
+						"Formula", 
+						JOptionPane.QUESTION_MESSAGE, null, null, "");
+				if (formula) {
+					def t = ts.findByName("Synthetic");
+					t.addSyntheticColumn(formula);
+					ts.updateUpwardsFrom(t);
+					jt2.model.fireTableStructureChanged();
+					jt2.reinit();
+					jt2.doLayout();
+				}
+			});
 
 		frame = swing.frame(id:'frame', title:"VdbenchExplorer",
 				locationRelativeTo:null) {
@@ -1369,6 +1436,17 @@ class VdbenchExplorerGUI {
 				menu("File") {
 					menuItem(action:open)
 					menuItem(action:exit)
+				}
+				menu("Column") {
+					menuItem(action:syntheticcolumn);
+					def t=ts.findByName("Synthetic");
+					if (t) {
+						menu("Enable columns") {
+							t.cols.each {
+								menuItem(name:it.columnHead.name);
+							}
+						};
+					}
 				}
 			}
 			panel(id:'panel') {
@@ -1387,7 +1465,7 @@ class VdbenchExplorerGUI {
 				action(name:"Only this value", closure: {
 					fT.addFilter(col,
 							jt2.model.getColumn(col).getRow(row).val, true);
-					println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
+					//println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
 					ts.updateUpwardsFrom(fT);
 					jt2.repaint();
 					jt2.tableHeader.repaint();
@@ -1398,7 +1476,7 @@ class VdbenchExplorerGUI {
 				action(name:"Exlude this value", closure: {
 					fT.addFilter(col, 
 							jt2.model.getColumn(col).getRow(row).val, false);
-					println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
+					//println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
 					ts.updateUpwardsFrom(fT);
 					jt2.repaint();
 					jt2.tableHeader.repaint();
@@ -1487,6 +1565,20 @@ class VdbenchExplorerGUI {
 					});
 				}
 			}
+			menuItem() {
+				action(name:"Remove column", closure: {
+					def cT = ts.findByName("Synthetic");
+					def fT = ts.findByName("RowFilter");
+					jt2.model.getColumn(col).groupby=false;
+					fT.removeColFilters(jt2.model.getColumn(col).columnHead.name);
+					cT.removeColumn(jt2.model.getColumn(col));
+					ts.updateUpwardsFrom(cT);
+					ts.updateUpwardsFrom(fT);
+					jt2.model.fireTableStructureChanged();
+					jt2.reinit();
+					jt2.doLayout();					
+				});
+			}
 		};		
 	}
 
@@ -1499,7 +1591,7 @@ class VdbenchExplorerGUI {
 		// The first column that is checked as plot is always the x column
 		0.upto(jt2.model.getColumnCount()-1) { col ->
 			int tmp = jt2.convertColumnIndexToModel(col);
-			if (jt2.tm.getColumn(tmp).plotted) {
+			if (jt2.model.getColumn(tmp).plotted) {
 				if (count==0) {
 					xcol = jt2.model.getColumn(tmp);
 					//println "xcol="+tmp+"="+xcol;
@@ -1661,8 +1753,8 @@ ts = new TableStack();
 ts.add(t1);
 ts.add(ColumnFilteredTable.class);
 t2=ts.findByClass(ColumnFilteredTable.class);
-t2.addSyntheticColumn((Column[])[t1.getColumnByName("c1"), t1.getColumnByName("c2")], "'c1'+'c2'");
-t2.addSyntheticColumn((String[])["c2", "c3"], "'c2'*'c3'");
+t2.addSyntheticColumn("'c1'+'c2'");
+t2.addSyntheticColumn("'c2'*'c3'");
 assert t2.getValueAt(3,0) == 2;
 assert t2.getValueAt(4,1) == 1; 
 assert t2.getValueAt(0,3) == 1;
