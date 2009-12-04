@@ -194,7 +194,8 @@ class SortedTable extends Table {
 		def c;
 		cols = [];
 		rm.init(masterTable.cols[0].length());
-		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
+		println "this="+this+" c="+masterTable.getColumnCount()+
+		" r="+masterTable.getRowCount()+" m="+masterTable;
 		masterTable.cols.each { col ->
 			c = new ProxyColumn(rm, col);
 			cols << c;
@@ -323,7 +324,8 @@ class RowFilteredTable extends Table {
 		def c;
 		cols = [];
 		rm.init(masterTable.cols[0].length());
-		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
+		println "this="+this+" c="+masterTable.getColumnCount()+
+		" r="+masterTable.getRowCount()+" m="+masterTable;
 		masterTable.cols.each { col ->
 			c = new RowFilteredColumn(rm, col);
 			cols << c;
@@ -440,7 +442,8 @@ class ColumnFilteredTable extends Table {
 		def c1;
 		def c2 = cols;
 		cols = [];
-		println "this="+this+" c="+masterTable.getColumnCount()+" m="+masterTable;
+		println "this="+this+" c="+masterTable.getColumnCount()+
+			" r="+masterTable.getRowCount()+" m="+masterTable;
 		c2.each { col ->
 			c1 = masterTable.cols.find { 
 				it.columnHead.name == col.columnHead.name 
@@ -1467,6 +1470,7 @@ class VdbenchExplorerGUI {
 							jt2.model.getColumn(col).getRow(row).val, true);
 					//println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
 					ts.updateUpwardsFrom(fT);
+					jt2.model.fireTableDataChanged();
 					jt2.repaint();
 					jt2.tableHeader.repaint();
 					updatePlots();
@@ -1478,6 +1482,7 @@ class VdbenchExplorerGUI {
 							jt2.model.getColumn(col).getRow(row).val, false);
 					//println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
 					ts.updateUpwardsFrom(fT);
+					jt2.model.fireTableDataChanged();
 					jt2.repaint();
 					jt2.tableHeader.repaint();
 					updatePlots();
@@ -1559,12 +1564,14 @@ class VdbenchExplorerGUI {
 					action(name:"Remove row filters for this column", closure: {
 						fT.removeColFilters(col);
 						ts.updateUpwardsFrom(fT);
+						jt2.model.fireTableDataChanged();
 						jt2.repaint();
 						jt2.tableHeader.repaint();
 						updatePlots();
 					});
 				}
 			}
+			separator();
 			menuItem() {
 				action(name:"Remove column", closure: {
 					def cT = ts.findByName("Synthetic");
