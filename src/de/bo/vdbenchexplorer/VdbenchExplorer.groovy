@@ -1347,6 +1347,7 @@ class VdbenchExplorerGUI {
 
     private final def exit;
     private final def open;
+    private final def about;
     private final def syntheticcolumn;
     private final def removecolumn;
     
@@ -1435,13 +1436,26 @@ class VdbenchExplorerGUI {
 					jt2.reinit();
 					jt2.doLayout();
 				}
-			});
+			}
+		);
+
+		about = swing.action(name:'About', closure:{
+				JOptionPane.showMessageDialog(frame, '''
+(c) $Date$ Baltic Online Computer GmbH 
+By:  Jochen Fritzenkštter
+URL: $URL$
+Rev: $Revision$
+						''', "About", 
+						JOptionPane.INFORMATION_MESSAGE);
+			}
+		);
 
 		frame = swing.frame(id:'frame', title:"VdbenchExplorer",
 				locationRelativeTo:null) {
 			menuBar {
 				menu("File") {
 					menuItem(action:open)
+					menuItem(action:about)
 					menuItem(action:exit)
 				}
 				menu("Column") {
