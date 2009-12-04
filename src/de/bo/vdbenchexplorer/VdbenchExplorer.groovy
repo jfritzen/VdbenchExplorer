@@ -326,7 +326,10 @@ class RowFilteredTable extends Table {
 		rm.init(masterTable.cols[0].length());
 		println "this="+this+" c="+masterTable.getColumnCount()+
 		" r="+masterTable.getRowCount()+" m="+masterTable;
-		masterTable.cols.each { col ->
+/*		masterTable.cols.each {
+			println "n="+it.columnHead.name+" r="+it.length();
+		}
+*/		masterTable.cols.each { col ->
 			c = new RowFilteredColumn(rm, col);
 			cols << c;
 			if (!filters[cols.size()-1]) { filters[cols.size()-1] = [] };
@@ -778,6 +781,7 @@ class SyntheticColumn extends SimpleColumn {
 		def expr2 = "(0.."+(baseColumns[0].length()-1)+
 			").collect { $expr }";
 		//println formula+" - "+expr+" - "+expr2;
+		cells = [];
 		b.col=[:];
 		baseColumns.each { c ->
 			b.col[c.columnHead.name]=[];
@@ -792,7 +796,7 @@ class SyntheticColumn extends SimpleColumn {
 		 * so this is safe. And harmful typos are very improbable.
 		 */
 		vals = gs.evaluate(expr2)*.toString();
-		//println vals;
+		//println "v="+vals.size()+" b="+baseColumns[0].length();
 		vals.each {
 			cells << new Cell(this, cells.size(), it);
 		}
