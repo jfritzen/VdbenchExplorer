@@ -3,6 +3,7 @@ package de.bo.vdbenchexplorer;
 import groovy.lang.GroovyShell;
 import groovy.swing.SwingBuilder;
 import java.util.regex.Matcher;
+import java.io.File;
 import java.util.Date;
 import java.util.HashMap;
 import java.awt.*;
@@ -70,6 +71,9 @@ abstract class Table extends AbstractTableModel {
 	}
 
 	Object getValueAt(int row, int col) {
+		if (!cols[col].getRow(row)) {
+			println "r="+row+" c="+col;
+		}
 		return cols[col].getRow(row).getTypedVal();
 	}
 
@@ -314,7 +318,7 @@ class RowFilteredTable extends Table {
 	JTable jt=null;
 	RowMap rm;
 	def closures=[];
-	def filters=[];
+	def filters=[:];
 
 	RowFilteredTable(Table t) {
 		this(t, null);
@@ -340,8 +344,9 @@ class RowFilteredTable extends Table {
 */		masterTable.cols.each { col ->
 			c = new RowFilteredColumn(rm, col);
 			cols << c;
-			if (!filters[cols.size()-1]) { filters[cols.size()-1] = [] };
-			c.filtered=(filters[cols.size()-1].size()>0);
+			if (!filters[c.columnHead.name]) 
+				{ filters[c.columnHead.name] = [] };
+			c.filtered=(filters[c.columnHead.name].size()>0);
 		}
 		//println "v2r="+rm.virt2real+" r2v="+rm.real2virt;
 	}
@@ -351,55 +356,48 @@ class RowFilteredTable extends Table {
 		applyFilters();
 	}
 	
-	void addFilter(int col, String[] vals, boolean inverse) {
+	void addFilter(String cname, String[] vals, boolean inverse) {
 		def c = { row ->
-			def val = masterTable.getColumn(col).getRow(row).val;
+			def val = masterTable.getColumnByName(cname).getRow(row).val;
 			boolean ret=vals.grep(val);
 			ret=inverse?!ret:ret;
 			//println "row="+row+" val="+val+" ret="+ret+" vals="+vals;
 			return ret;
 		};
 		closures << c;
-		filters[col] << c;
-		cols[col].filtered = true;
+		filters[cname] << c;
+		getColumnByName(cname).filtered = true;
 		return;
 	}
 
-	void addFilter(int col, String val, boolean inverse) {
+	void addFilter(String cname, String val, boolean inverse) {
 		def c = { row ->
-			boolean ret = (masterTable.getColumn(col).getRow(row).val == val);
+			boolean ret = 
+				(masterTable.getColumnByName(cname).getRow(row).val == val);
 			ret=inverse?!ret:ret;
 			//println "row="+row+" val="+val+" ret="+ret;
 			return ret;
 		};
 		closures << c
-		filters[col] << c;
-		cols[col].filtered = true;
+		filters[cname] << c;
+		getColumnByName(cname).filtered = true;
 		return;
 	}
 
 	void removeAllFilters() {
 		closures = [];
 		cols.each { it.filter = [] };
-		filters = [];
+		filters = [:];
 		cols.each { it.filtered = false }
 	}
 
 	void removeColFilters(String name) {
-		def c = cols.findIndexOf { it.columnHead.name == name };
-		if (c>=0) {
-			removeColFilters(c);
-		}
+		filters.remove(name);
+		getColumnByName(name).filtered=false;
 	}
 
 	void removeColFilters(int col) {
-		if (filters[col]) {
-			filters[col].each {
-				closures.remove(it);
-			}
-			filters[col] = [];
-			cols[col].filtered = false;
-		}
+		removeColFilters(cols[col].columnHead.name);
 	}
 
 	int filterCount() {
@@ -453,6 +451,13 @@ class ColumnFilteredTable extends Table {
 		cols = [];
 		println "this="+this+" c="+masterTable.getColumnCount()+
 			" r="+masterTable.getRowCount()+" m="+masterTable;
+		masterTable.cols.each { col ->
+			c1 = c2.find { it.columnHead.name == col.columnHead.name }
+			def b = removed.grep { it.columnHead.name == col.columnHead.name }
+			if (!c1 && !b) {
+				cols << col;
+			}
+		};
 		c2.each { col ->
 			c1 = masterTable.cols.find { 
 				it.columnHead.name == col.columnHead.name 
@@ -463,7 +468,7 @@ class ColumnFilteredTable extends Table {
 				}
 				if (c1) { cols << c1 }
 			}			
-		}
+		};	
 	}
 
 	// Implement abstract method from Table
@@ -544,10 +549,10 @@ class MergedTable extends Table {
 		}
 		println "c1="+c1.size()+" n="+n;
 
-		def shortNames = makeShortNames(masterTables*.name);
 		
 		cols = [];
 		if (masterTables.size()>1) {
+			def shortNames = makeShortNames(masterTables*.name);
 			c2 = new ConcatColumn("Dataset", "Dataset");
 			c2.columnType = Type.LABEL;
 			masterTables.each { t ->
@@ -577,10 +582,16 @@ class MergedTable extends Table {
 		init();
 	}
 
-	void update() {
+	void remove(Table t) {
+		masterTables.remove(t);
 		init();
 	}
+	void update() {}
 
+	Table[] listTables() {
+		return masterTables;
+	}
+	
 	static HashMap makeShortNames(names) {
 		def hm = [:];
 		int mp, ms;
@@ -1024,8 +1035,8 @@ class ConstColumn extends Column {
 */
 
 class RowMap {
-	def real2virt = [:];
-	def virt2real = [:];
+	def real2virt = [];
+	def virt2real = [];
 
 	RowMap() {}
 	
@@ -1480,22 +1491,42 @@ class JTable2 extends JTable {
 		
 		return w+2*margin;
 	}
+}
 
-/*	void columnAdded(TableColumnModelEvent e) {
-		println "atcme="+e;
-		super.columnAdded(e);
+class SimpleFileFilter extends javax.swing.filechooser.FileFilter {
+	private String classFilter;
+	private static supported_list = [
+         "Vdbench":VdbenchFlatfileTable.class
+     ];
+
+	SimpleFileFilter(String cl) {
+		classFilter = cl;
+	}
+	
+	boolean accept(File f) {
+		if (f.directory) {
+			return true;
+		}
+
+		if (supported_list[classFilter] == VdbenchFlatfileTable.class) {
+			if (f.name == "flatfile.html") {
+				return true;
+			} else {
+				return false;
+			}
+		}
 	}
 
-	void columnRemoved(TableColumnModelEvent e) {
-		println "rtcme="+e;
-		super.columnRemoved(e);
+	String getDescription() {
+		return classFilter;
 	}
 
-	void tableChanged(TableModelEvent e) {
-		println "tme="+e;
-		super.tableChanged(e);
+	Class getTableClass() {
+		return supported_list[classFilter];
 	}
-*/}
+
+	static String[] supported() { return supported_list.keySet() }
+}
 
 class TableStack {
 	def tables = [];
@@ -1555,6 +1586,9 @@ class VdbenchExplorerGUI {
 
     private final def exit;
     private final def open;
+    private final def addf;
+    private final def remf;
+    private final def openDialog;
     private final def about;
     private final def syntheticcolumn;
     private final def removecolumn;
@@ -1562,17 +1596,61 @@ class VdbenchExplorerGUI {
 	VdbenchExplorerGUI() {
 		swing = new SwingBuilder();
 
+		openDialog  = swing.fileChooser(
+				dialogTitle:"Choose a table file", 
+                id:"openDialog", acceptAllFileFilterUsed:false,
+                fileSelectionMode: JFileChooser.FILES_ONLY) {};                
 		exit = swing.action(name:'Exit', closure:{System.exit(0)});
+		addf = swing.action(name:'Add Table', closure:{
+            if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
+            	return;
+
+            def file = openDialog.selectedFile.path;
+            def t1 = openDialog.fileFilter.tableClass.newInstance(file);
+            
+            def t = ts.findByName("Merger");
+            t.add(t1);
+            ts.updateUpwardsFrom(t);
+			jt2.model.fireTableStructureChanged();
+			jt2.reinit();
+			updatePlots();
+		});
+		remf = swing.action(name:'Remove Table', closure:{
+            def t = ts.findByName("Merger");
+            def tl = t.listTables();
+            def ret = JOptionPane.showInputDialog(null, 
+            		"Choose a table to remove", 
+            		"Remove Table", JOptionPane.QUESTION_MESSAGE, 
+            		null, (Object[]) tl*.name, null);
+            if (!ret) return;
+
+            def t1=tl.find { it.name == ret };
+            t.remove(t1);
+            ts.updateUpwardsFrom(t);
+			jt2.model.fireTableStructureChanged();
+			jt2.reinit();
+			updatePlots();
+		});
 		open = swing.action(name:'Open', closure:{			
-			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
-			def t2 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+//			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+//			def t2 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 //			def t2 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 //			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 //			def t2 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 
+            SimpleFileFilter.supported().each { 
+            	openDialog.addChoosableFileFilter(
+            			new SimpleFileFilter(it));
+            }
+
+            if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
+            	return;
+
+            def file = openDialog.selectedFile.path;
+            def t1 = openDialog.fileFilter.tableClass.newInstance(file);
+            
 			ts.add(t1, "Base");
 			ts.add(MergedTable.class, "Merger");
-			ts.findByName("Merger").add(t2);
 			ts.add(ColumnFilteredTable.class, "Synthetic");
 			ts.findByName("Synthetic").
 				removeColumnsByNames(ts.findByName("Base").boringColumns());
@@ -1668,6 +1746,8 @@ $Revision$
 			menuBar {
 				menu("File") {
 					menuItem(action:open)
+					menuItem(action:addf)
+					menuItem(action:remf)
 					menuItem(action:about)
 					menuItem(action:exit)
 				}
@@ -1697,7 +1777,7 @@ $Revision$
 		def popup = swing.popupMenu(id:"popupcell") {
 			menuItem() {
 				action(name:"Only this value", closure: {
-					fT.addFilter(col,
+					fT.addFilter(jt2.model.getColumn(col).columnHead.name,
 							jt2.model.getColumn(col).getRow(row).val, true);
 					//println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
 					ts.updateUpwardsFrom(fT);
@@ -1709,7 +1789,7 @@ $Revision$
 			};
 			menuItem() {
 				action(name:"Exlude this value", closure: {
-					fT.addFilter(col, 
+					fT.addFilter(jt2.model.getColumn(col).columnHead.name, 
 							jt2.model.getColumn(col).getRow(row).val, false);
 					//println "r="+row+" c="+col+" v="+jt2.model.getColumn(col).getRow(row).val;
 					ts.updateUpwardsFrom(fT);
@@ -1964,7 +2044,7 @@ assert t2.getValueAt(2,2) == "b";
 assert t2.getValueAt(2,2) == "b";
 assert t2.getValueAt(4,2) == "b";
 t3 = new RowFilteredTable(t2);
-t3.addFilter(0, "b", false);
+t3.addFilter(t1.getColumn(0).columnHead.name, "b", false);
 t3.applyFilters();
 assert t3.length()==5;
 0.upto(t3.length()-1) {
