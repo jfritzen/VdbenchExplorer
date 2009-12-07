@@ -4,6 +4,7 @@ import groovy.lang.GroovyShell;
 import groovy.swing.SwingBuilder;
 import java.util.regex.Matcher;
 import java.util.Date;
+import java.util.HashMap;
 import java.awt.*;
 import java.awt.event.*;
 import javax.swing.*;
@@ -42,15 +43,18 @@ enum Type { DATETIME, TIME, LABEL, INT, FLOAT };
  * This can be annoying, we need to save the column order somehow.
  */
 
+/* All kinds of Tables
+*/
+
 abstract class Table extends AbstractTableModel {
 	String name;
 	String description;
 	def cols=[];
 
-	Table() {
-		super();
+	Table(String n, String d) {
+		name=n;
+		description=d;
 	}
-	
 	// TableModel methods
 	
 	int getColumnCount() {
@@ -123,6 +127,15 @@ abstract class Table extends AbstractTableModel {
 }
 
 class SimpleTable extends Table {
+
+	SimpleTable() {
+		super("", "");
+	}
+	
+	SimpleTable(String n, String d) {
+		super(n, d);
+	}
+	
 	void update() {};
 }
 
@@ -130,7 +143,7 @@ class VdbenchFlatfileTable extends Table {
 	def h=[:], heads;
 	
 	VdbenchFlatfileTable(String file) {
-		super();
+		super(file, file);
 		Matcher m;
 		String[] ls = new File(file).readLines();
 		def t=this;
@@ -149,8 +162,7 @@ class VdbenchFlatfileTable extends Table {
 			if (it =~ /^[0-9]/) {
 				def row=it.split();
 				1.upto(row.size()) { col ->
-					cols[col-1].add(new Cell(cols[col-1], cols[col-1].length(),
-							row[col-1]));
+					cols[col-1].add(new Cell(cols[col-1], row[col-1]));
 				}
 			}
 		}
@@ -181,11 +193,9 @@ class SortedTable extends Table {
 	}
 
 	SortedTable(Table t, JTable jt) {
-		super();
+		super(t.name, t.description);
 		this.masterTable=t;
 		this.jt=jt;
-		name=t.name;
-		description=t.description;
 		rm = new RowMap();
 		init();
 	}
@@ -311,11 +321,9 @@ class RowFilteredTable extends Table {
 	}
 
 	RowFilteredTable(Table t, JTable jt) {
-		super();
+		super(t.name, t.description);
 		this.masterTable=t;
 		this.jt=jt;
-		name=t.name;
-		description=t.description;
 		rm = new RowMap();
 		init();
 	}
@@ -433,10 +441,8 @@ class ColumnFilteredTable extends Table {
 	def synthetic = [];
 	
 	ColumnFilteredTable(Table t) {
-		super();
+		super(t.name, t.description);
 		this.masterTable = t;
-		this.name=t.name;
-		this.description=t.description;
 		cols = masterTable.cols;
 		init();
 	}
@@ -508,6 +514,115 @@ class ColumnFilteredTable extends Table {
 	}
 }
 
+class MergedTable extends Table {
+	def masterTables;
+
+	MergedTable(Table t) {
+		super(t.name, t.description);
+		masterTables=[t];
+		init();
+	}
+
+	private void init() {		
+		def c1;
+		def c2;
+		def n;
+		println "this="+this
+		masterTables.each { 
+			println "  c="+it.columnCount+" r="+it.rowCount+" m="+it;
+		}
+		
+		c1 = [];
+		n=0;
+		masterTables.each { t ->
+			t.cols.each {
+				if (!c1.contains(it.columnHead.name)) {
+					c1 << it.columnHead.name;
+				}
+			};
+			n += t.rowCount;
+		}
+		println "c1="+c1.size()+" n="+n;
+
+		def shortNames = makeShortNames(masterTables*.name);
+		
+		cols = [];
+		if (masterTables.size()>1) {
+			c2 = new ConcatColumn("Dataset", "Dataset");
+			c2.columnType = Type.LABEL;
+			masterTables.each { t ->
+				c2.add(t, new ConstColumn('"'+shortNames[t.name]+'"', t.rowCount));
+			}
+			cols << c2;
+		}
+
+		c1.each { c ->
+			def ccc = new ConcatColumn(c, masterTables[0].
+					getColumnByName(c).columnHead.description);
+			masterTables.each { t ->
+				def col = t.cols.
+					find { it.columnHead.name == c };
+				if (col) {
+					ccc.add(t, col);
+				} else {
+					ccc.add(t, new ConstColumn(null, t.rowCount));
+				}
+			}
+			cols << ccc;
+		}
+	}
+
+	void add(Table t) {
+		masterTables << t;
+		init();
+	}
+
+	void update() {
+		init();
+	}
+
+	static HashMap makeShortNames(names) {
+		def hm = [:];
+		int mp, ms;
+		int l;
+		String wp = names[0];
+		String ws = names[0].reverse();
+		if (names.size()==1) {
+			hm[wp] = wp;
+			return hm;
+		} else if (names.size()==0) {
+			return hm;
+		}
+		l = wp.length();
+		ms = l;
+		mp = l;
+		int count=1;
+		int i;
+		def s;
+		while (count<names.size() && !(mp<0 && ms<0)) {
+			i = 0;
+			s = names[count];
+			while(i<=mp && s[i]==wp[i]) { i++ };
+			mp = i-1;
+			i = 0;
+			s = s.reverse();
+			while(i<=ms && s[i]==ws[i]) { i++ };
+			ms = i-1;
+			println count+" "+names[count]+" "+mp+" "+ms+" "+names[count].substring(mp+1,names[count].length()-(ms+1));
+			count++;
+		}
+		names.each {
+			s = it.substring(mp+1,it.length()-(ms+1));
+			hm[it] = s;
+		}
+		return hm;
+	}
+	
+}
+
+/* All kinds of columns
+*/
+
 abstract class Column {
 	private Type columnType = Type.LABEL;
 	ColumnHead columnHead;
@@ -554,7 +669,7 @@ abstract class Column {
 	Column add(Column c) {
 		 int row = length();
 		 c*.vals.each {
-			 add(new Cell(this, row++, it));
+			 add(new Cell(this, it));
 		 }
 		 return this;
 	}
@@ -570,7 +685,7 @@ class SimpleColumn extends Column {
 	SimpleColumn(String head, String desc, String[] vals) {
 		this.columnHead = new ColumnHead(name:head, description:desc);
 		vals.each {
-			cells << new Cell(this, cells.size(), it);
+			cells << new Cell(this, it);
 		}
 	}
 	
@@ -578,7 +693,7 @@ class SimpleColumn extends Column {
 		this.columnHead = new ColumnHead(name:head, description:desc);
 		this.columnType = type;
 		vals.each {
-			cells << new Cell(this, cells.size(), it);
+			cells << new Cell(this, it);
 		}
 	}
 	
@@ -798,7 +913,7 @@ class SyntheticColumn extends SimpleColumn {
 		vals = gs.evaluate(expr2)*.toString();
 		//println "v="+vals.size()+" b="+baseColumns[0].length();
 		vals.each {
-			cells << new Cell(this, cells.size(), it);
+			cells << new Cell(this, it);
 		}
 		columnType=this.guessType();
 	}
@@ -827,6 +942,86 @@ class SyntheticColumn extends SimpleColumn {
 	}	
 
 }
+
+class ConcatColumn extends SimpleColumn {
+	def rowMap = [:];
+	def tables = [];
+	def cols = [:];
+	int length = 0;
+
+	ConcatColumn(String name, String desc) {
+		super(new ColumnHead(name:name, description:desc));
+	}
+
+	// Own methods
+
+	void add(Table t, Column c) {
+		def ls = length;
+		length += t.rowCount;
+		tables << t;
+		cols[t] = c;
+		rowMap[t]=(ls..(length-1));
+		c.vals.each {
+			cells << new Cell(this, it);
+		}
+		columnType = guessType((String[])this.cells*.val);
+		//println "t="+tables+" cls="+cols+" rM="+rowMap;
+	}
+
+	void remove(Table t) {
+		cols.remove(t);
+		tables.remove(t);
+		rowMap[t].each { cells.remove(it) }
+		rowMap.remove(t);
+		columnType = guessType((String[])this.cells*.val);
+	}
+
+	void update() {
+		cells = [];
+		tables.each {
+			cols[t].vals.each {
+				cells << new Cell(this, it);				
+			}
+		}
+		columnType = guessType((String[])this.cells*.val);
+	}
+}
+
+class ConstColumn extends Column {
+	int length;
+	Cell dummycell;
+	
+	ConstColumn(String val, int n) {
+		length = n;
+		dummycell = new Cell(this, val);
+		columnType = guessType((String[])[dummycell.val]);
+	}
+	
+	Cell getRow(int row) { return dummycell }
+	String[] getVals() { (String[]) (1..length).collect { dummycell.val } }
+	void setRow(int row, Cell c) {}
+	void add(Cell c) {length++}
+	void removeAll() {length=0}
+	int length() { return length }
+	int cardinality() { return 1 }
+	String[] distinctVals() { return (String[])[dummycell.val] }
+	double[] getDoubles() { 
+  		def x = dummycell.getTypedVal();
+		double t;
+
+		if (columnType == Type.TIME) {
+			t = x/1000;
+		} else if (columnType == Type.LABEL) {
+			t = l2d[x];
+		} else {
+			t = (double) x;
+		}
+		return (double[]) (1..length).collect { t };
+    }
+}
+
+/* Helper classes
+*/
 
 class RowMap {
 	def real2virt = [:];
@@ -869,13 +1064,11 @@ class ColumnHead {
 }
 
 class Cell {
-	int row;
 	Column column;
 	String val;
 
-	Cell(Column c, int row, String val) {
+	Cell(Column c, String val) {
 		this.column = c;
-		this.row = row;
 		this.val = val;	
 	}
 
@@ -884,6 +1077,7 @@ class Cell {
 	}
 
 	Object getTypedVal() {
+		if (val == null) { return null }
 		switch(column.columnType) {
 		case Type.LABEL:
 			return (String)val;
@@ -907,6 +1101,9 @@ class Cell {
 	}
 }
 
+/* The graphics
+*/
+
 class Plot {
 	JFrame plotFrame;
 	JPanel p;
@@ -920,12 +1117,15 @@ class Plot {
 	 */
 	Column groupby = null;
 	String description = null;
+	Graph_2D graph;
+	GraphSettings gs;
+	Dimension box;
 
-	// Makes no sense, do not use
 	Plot() {
 		plotFrame = new JFrame();
 		p = new JPanel(new BorderLayout());
 		plotFrame.getContentPane().add(p);
+		gs = new GraphSettings();
 	}	
 
 	Plot(Column c1, Column c2) {
@@ -933,14 +1133,12 @@ class Plot {
 	}	
 
 	Plot(Column c1, Column c2, Column g) {
+		this();
 		assert c1.length() == c2.length();
 		this.cx = c1;
 		this.cy = c2;
 		this.groupby = g;
 
-		plotFrame = new JFrame();
-		p = new JPanel(new BorderLayout());
-		plotFrame.getContentPane().add(p);
 		init();
 	}	
 
@@ -966,12 +1164,14 @@ class Plot {
 	}
 	
 	private void init() {
+		//println "px="+cx.columnHead.name+" py="+cy.columnHead.name;
 		double[] x = cx.getDoubles();
 		double[] y = cy.getDoubles();
 
 		p.removeAll();
 		
-		GraphSettings gs = new GraphSettings();
+		//GraphSettings gs = new GraphSettings();
+		gs.reset();
 		gs.setMinValue(GraphSettings.X_AXIS, x.toList().min());
 		gs.setMaxValue(GraphSettings.X_AXIS, x.toList().max());
 		gs.setMinValue(GraphSettings.Y_AXIS, y.toList().min());
@@ -1060,9 +1260,15 @@ class Plot {
 		Vector v = new Vector();
 		da.each { it -> v.add(it) };
 
-		Graph_2D graph = new Graph_2D(gs);
+		if (!box) {
+			box = new Dimension(400,300);
+		} else {
+			box = p.getSize();
+		}	
+		graph = new Graph_2D(gs);
 		graph.show(v);
 
+		p.setPreferredSize(box);
 		p.add(graph,BorderLayout.CENTER);
 		plotFrame.pack();
 		plotFrame.show();
@@ -1076,9 +1282,11 @@ class Plot {
 	}
 
 	private Color gencolor(int i, int n) {
-		return new Color((float)(i+1)/(n+2), (float)(i+1)/(n+2), 
+		float f = (float)((i+1)/(n+2));
+		return new Color(Color.HSBtoRGB(f, (float)1.0, (float)1.0));
+/*		return new Color((float)(i+1)/(n+2), (float)(i+1)/(n+2), 
 				(float)(i+1)/(n+2));
-	}
+*/	}
 }
 
 /* Listeners
@@ -1340,7 +1548,7 @@ class VdbenchExplorerGUI {
 	int margin = 10;
 	private JTable2 jt2;
 	private Column groupby = null;
-	private int groupbylimit = 10;
+	private int groupbylimit = 100;
 	private int delay = 500;
 	private java.util.Timer redrawRequest = null;
 	private TableStack ts = new TableStack();
@@ -1355,11 +1563,16 @@ class VdbenchExplorerGUI {
 		swing = new SwingBuilder();
 
 		exit = swing.action(name:'Exit', closure:{System.exit(0)});
-		open = swing.action(name:'Open', closure:{
+		open = swing.action(name:'Open', closure:{			
 			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+			def t2 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+//			def t2 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 //			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+//			def t2 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
 
 			ts.add(t1, "Base");
+			ts.add(MergedTable.class, "Merger");
+			ts.findByName("Merger").add(t2);
 			ts.add(ColumnFilteredTable.class, "Synthetic");
 			ts.findByName("Synthetic").
 				removeColumnsByNames(ts.findByName("Base").boringColumns());
@@ -1393,7 +1606,7 @@ class VdbenchExplorerGUI {
 				 * to recalculate the table and every plot for every 
 				 * intermediate position of the column. So every new 
 				 * intermediate column position triggers a delayed 
-				 * recalculation which is cancelled when there is another
+				 * recalculation which is canceled when there is another
 				 * column move during the next <delay> milliseconds.
 				 */
 				if (redrawRequest!=null) {
@@ -1443,8 +1656,8 @@ class VdbenchExplorerGUI {
 				JOptionPane.showMessageDialog(frame, '''
 (c) $Date$ Baltic Online Computer GmbH 
 By:  Jochen Fritzenkštter
-URL: $URL$
-Rev: $Revision$
+$URL$
+$Revision$
 						''', "About", 
 						JOptionPane.INFORMATION_MESSAGE);
 			}
@@ -1770,7 +1983,7 @@ assert t3.getValueAt(2,2) == "b";
 assert t3.getValueAt(2,2) == "b";
 assert t3.getValueAt(4,2) == "a";
 
-t1 = new SimpleTable();
+t1 = new SimpleTable("Test1", "Test1");
 t1.add(new SimpleColumn("c1", "c1", Type.INT, (String[])["0","1","0","2","0","0"]));
 t1.add(new SimpleColumn("c2", "c2", Type.INT, (String[])["1","1","0","3","1","3"]));
 t1.add(new SimpleColumn("c3", "c3", Type.INT, (String[])["0","1","2","0","1","3"]));
@@ -1788,6 +2001,37 @@ assert t2.getValueAt(3,3) == 5;
 assert t2.getValueAt(0,4) == 0;
 assert t2.getValueAt(1,4) == 1;
 assert t2.getValueAt(5,4) == 9;
+
+assert MergedTable.makeShortNames(["Test"]) == ["Test":"Test"];
+assert MergedTable.makeShortNames(["Test1","Test2"]) == ["Test1":"1", "Test2":"2"];
+assert MergedTable.makeShortNames(["1Test","2Test"]) == ["1Test":"1", "2Test":"2"];
+assert MergedTable.makeShortNames(["Waelzer","Walzer"]) == ["Waelzer":"e", "Walzer":""];
+assert MergedTable.makeShortNames(["Waelzer","Walzer","Wasser"]) == ["Waelzer":"elz", "Walzer":"lz", "Wasser":"ss"];
+assert MergedTable.makeShortNames(["abcde","xyz"]) == ["abcde":"abcde", "xyz":"xyz"];
+
+t2=new SimpleTable("Test2", "Test2");
+t2.add(new SimpleColumn("c1", "c1", Type.INT, (String[])["0","7"]));
+t2.add(new SimpleColumn("c2", "c2", Type.INT, (String[])["6","1"]));
+ts=new TableStack();
+ts.add(t1);
+ts.add(MergedTable.class, "Merge");
+t3=ts.findByName("Merge");
+assert t3.rowCount == 6;
+assert t3.getValueAt(1,0) == 1;
+assert t3.getValueAt(3,0) == 2;
+assert t3.getValueAt(3,1) == 3;
+t3.add(t2);
+assert t3.rowCount == 8;
+assert t3.getColumnByName("c1").length() == 8;
+assert t3.getValueAt(0,0) == '"1"';
+assert t3.getValueAt(5,0) == '"1"';
+assert t3.getValueAt(6,0) == '"2"';
+assert t3.getValueAt(7,0) == '"2"';
+assert t3.getValueAt(1,1) == 1;
+assert t3.getValueAt(3,1) == 2;
+assert t3.getValueAt(7,1) == 7;
+assert t3.getValueAt(3,2) == 3;
+assert t3.getValueAt(6,2) == 6;
 
 v = new VdbenchExplorerGUI();
 
