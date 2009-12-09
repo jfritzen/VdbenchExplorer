@@ -206,9 +206,9 @@ class SortedTable extends Table {
 		def c;
 		cols = [];
 		rm.init(masterTable.cols[0].length());
-		println "this="+this+" c="+masterTable.getColumnCount()+
+/*		println "this="+this+" c="+masterTable.getColumnCount()+
 		" r="+masterTable.getRowCount()+" m="+masterTable;
-		masterTable.cols.each { col ->
+*/		masterTable.cols.each { col ->
 			c = new ProxyColumn(rm, col);
 			cols << c;
 		}
@@ -340,9 +340,9 @@ class RowFilteredTable extends Table {
 		def c;
 		cols = [];
 		rm.init(masterTable.cols[0].length());
-		println "this="+this+" c="+masterTable.getColumnCount()+
+/*		println "this="+this+" c="+masterTable.getColumnCount()+
 		" r="+masterTable.getRowCount()+" m="+masterTable;
-/*		masterTable.cols.each {
+*//*		masterTable.cols.each {
 			println "n="+it.columnHead.name+" r="+it.length();
 		}
 */		masterTable.cols.each { col ->
@@ -454,9 +454,9 @@ class ColumnFilteredTable extends Table {
 		def c1;
 		def c2 = cols;
 		cols = [];
-		println "this="+this+" c="+masterTable.getColumnCount()+
+/*		println "this="+this+" c="+masterTable.getColumnCount()+
 			" r="+masterTable.getRowCount()+" m="+masterTable;
-		masterTable.cols.each { col ->
+*/		masterTable.cols.each { col ->
 			c1 = c2.find { it.columnHead.name == col.columnHead.name }
 			def b = removed.grep { it.columnHead.name == col.columnHead.name }
 			if (!c1 && !b) {
@@ -552,11 +552,11 @@ class MergedTable extends Table {
 		def c1;
 		def c2;
 		def n;
-		println "this="+this
+/*		println "this="+this
 		masterTables.each { 
 			println "  c="+it.columnCount+" r="+it.rowCount+" m="+it;
 		}
-		
+*/		
 		c1 = [];
 		n=0;
 		masterTables.each { t ->
