@@ -4,6 +4,7 @@ import groovy.lang.GroovyShell;
 import groovy.swing.SwingBuilder;
 import java.util.regex.Matcher;
 import java.io.File;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.awt.*;
@@ -71,9 +72,6 @@ abstract class Table extends AbstractTableModel {
 	}
 
 	Object getValueAt(int row, int col) {
-		if (!cols[col].getRow(row)) {
-			println "r="+row+" c="+col;
-		}
 		return cols[col].getRow(row).getTypedVal();
 	}
 
@@ -241,6 +239,12 @@ class SortedTable extends Table {
 		def mcol, tmp0, tmp1, tmp2, col = 0;
 		def stack = [];
 
+		if (cols[0].length()==0) { 
+			rm.real2virt = [];
+			rm.virt2real = [];
+			return;
+		}
+		
 		def rowPermutation = (0..cols[0].length()-1).toArray();
 		//println "rP="+rowPermutation;
 		stack << [rowPermutation];
@@ -392,7 +396,8 @@ class RowFilteredTable extends Table {
 	}
 
 	void removeColFilters(String name) {
-		filters.remove(name);
+		filters[name].each { closures.remove(it) };
+		filters[name] = [];
 		getColumnByName(name).filtered=false;
 	}
 
@@ -476,7 +481,18 @@ class ColumnFilteredTable extends Table {
 	void update() {
 		cols.each {
 			if (it instanceof SyntheticColumn) {
-				it.update();
+				/* When the columns contents changed, an update is
+				 * sufficient. If we have new columns, than we replace
+				 * the base columns in the SyntheticColumn.
+				 */
+				
+				if ((columnsFromExpression(it.formula).toList() -
+						it.baseColumns.toList()).size()==0) {
+					it.update();
+				} else {
+					//println "cols="+cols+" s="+synthetic+" n="+it.columnHead.name+" t="+it;
+					it.replaceBaseColumns(columnsFromExpression(it.formula));
+				}
 			}
 		}
 		init();
@@ -485,17 +501,21 @@ class ColumnFilteredTable extends Table {
 	// Own methods
 
 	void addSyntheticColumn(String expr) {
-		def c = [];
-		expr.eachMatch(/\'(.*?)\'/) { match ->
-					c << masterTable.getColumnByName(match[1]); 
-		};
-		addSyntheticColumn((Column[]) c, expr);
+		addSyntheticColumn(columnsFromExpression(expr), expr);
 	}
 
 	void addSyntheticColumn(Column[] baseCols, String expr) {
 		def c = new SyntheticColumn(baseCols, expr);
 		synthetic << c;
 		cols << c;
+	}
+
+	private Column[] columnsFromExpression(String expr) {
+		def c = [];
+		expr.eachMatch(/\'(.*?)\'/) { match ->
+					c << masterTable.getColumnByName(match[1]); 
+		};
+		return (Column[])c;
 	}
 
 	void removeColumn(Column col) {
@@ -547,7 +567,7 @@ class MergedTable extends Table {
 			};
 			n += t.rowCount;
 		}
-		println "c1="+c1.size()+" n="+n;
+		//println "c1="+c1.size()+" n="+n;
 
 		
 		cols = [];
@@ -619,7 +639,7 @@ class MergedTable extends Table {
 			s = s.reverse();
 			while(i<=ms && s[i]==ws[i]) { i++ };
 			ms = i-1;
-			println count+" "+names[count]+" "+mp+" "+ms+" "+names[count].substring(mp+1,names[count].length()-(ms+1));
+			//println count+" "+names[count]+" "+mp+" "+ms+" "+names[count].substring(mp+1,names[count].length()-(ms+1));
 			count++;
 		}
 		names.each {
@@ -886,10 +906,10 @@ class RowFilteredColumn extends ProxyColumn {
 /* Create synthetic columns from other columns, using a closure
  */
 class SyntheticColumn extends SimpleColumn {
-	Column[] baseColumns;
-	String formula;
-	Binding b;
-	GroovyShell gs;
+	private Column[] baseColumns;
+	private String formula;
+	private Binding b;
+	private GroovyShell gs;
 
 	SyntheticColumn(Column[] cols, String e) {
 		super(new ColumnHead(name:e, description:e));
@@ -933,6 +953,11 @@ class SyntheticColumn extends SimpleColumn {
 		init();
 	}
 
+	void replaceBaseColumns(Column[] cols) {
+		this.baseColumns = cols;
+		init();
+	}
+
 	// Overwritten methods
 	
 	void add(Cell c) {
@@ -950,7 +975,15 @@ class SyntheticColumn extends SimpleColumn {
 	boolean isFiltered() {
 		// Since this is a new column, it is never row filtered. 
 		return false;
-	}	
+	}
+
+	Column[] getBaseColumns() {
+		return baseColumns;
+	}
+
+	String getFormula() {
+		return formula;
+	}
 
 }
 
@@ -1045,8 +1078,13 @@ class RowMap {
 	}
 	
 	void init(int n) {
-		real2virt = 0..(n-1);
-		virt2real = 0..(n-1);
+		if (n>0) {
+			real2virt = 0..(n-1);
+			virt2real = 0..(n-1);
+		} else {
+			real2virt = [];
+			virt2real = [];
+		}
 	}
 	
 	int real2virt(int row) {
@@ -1391,7 +1429,7 @@ class CustomHeaderRenderer extends DefaultTableCellRenderer
     		if (header != null) {
     	        int col=table.convertColumnIndexToModel(column);
 
-    			if (((Table)table.model).getColumn(col).plotted) {
+    	        if (((Table)table.model).getColumn(col).plotted) {
     				if (((Table)table.model).getColumn(col).groupby) {
     					if (((Table)table.model).getColumn(col).filtered) {
     						setForeground(Color.ORANGE);
@@ -1572,18 +1610,19 @@ class TableStack {
 }
 
 class VdbenchExplorerGUI {
-	def swing;
 	def frame;
 	def plots = [];
 	def fixedplots = [];
-	int margin = 10;
 	private JTable2 jt2;
 	private Column groupby = null;
-	private int groupbylimit = 100;
-	private int delay = 500;
 	private java.util.Timer redrawRequest = null;
-	private TableStack ts = new TableStack();
+	private TableStack ts;
 
+	private final int margin = 10;
+	private final int groupbylimit = 100;
+	private final int delay = 500;
+
+	private final def swing;
     private final def exit;
     private final def open;
     private final def addf;
@@ -1592,6 +1631,8 @@ class VdbenchExplorerGUI {
     private final def about;
     private final def syntheticcolumn;
     private final def removecolumn;
+    private final def menubar1;
+    private final def menubar2;
     
 	VdbenchExplorerGUI() {
 		swing = new SwingBuilder();
@@ -1611,7 +1652,18 @@ class VdbenchExplorerGUI {
             def t = ts.findByName("Merger");
             t.add(t1);
             ts.updateUpwardsFrom(t);
-			jt2.model.fireTableStructureChanged();
+            /* Hack: currently, with fireTableStructureChanged()
+             * we lose the column order. So we only fire the event
+             * when absolutely necessary, i.e. when we add the  
+             * Dataset column, i.e. when we add the second
+             * table.
+             */	            
+            def tl = t.listTables();
+            if (tl.size()==2) {
+            	jt2.model.fireTableStructureChanged();
+            } else {
+            	jt2.model.fireTableDataChanged();            	
+            }
 			jt2.reinit();
 			updatePlots();
 		});
@@ -1625,19 +1677,27 @@ class VdbenchExplorerGUI {
             if (!ret) return;
 
             def t1=tl.find { it.name == ret };
-            t.remove(t1);
-            ts.updateUpwardsFrom(t);
-			jt2.model.fireTableStructureChanged();
-			jt2.reinit();
-			updatePlots();
-		});
+            if (tl.size()>1) {
+	            t.remove(t1);
+	            ts.updateUpwardsFrom(t);
+	            /* Hack: currently, with fireTableStructureChanged()
+	             * we lose the column order. So we only fire the event
+	             * when absolutely necessary, i.e. when we lose the 
+	             * Dataset column, i.e. when we remove the last but one
+	             * table.
+	             */	            
+	            if (tl.size()==2) {
+	            	jt2.model.fireTableStructureChanged();
+	            } else {
+	            	jt2.model.fireTableDataChanged();
+	            }
+				jt2.reinit();
+				updatePlots();
+            } else {
+            	init();
+            }
+        });
 		open = swing.action(name:'Open', closure:{			
-//			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
-//			def t2 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
-//			def t2 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
-//			def t1 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
-//			def t2 = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
-
             SimpleFileFilter.supported().each { 
             	openDialog.addChoosableFileFilter(
             			new SimpleFileFilter(it));
@@ -1658,7 +1718,6 @@ class VdbenchExplorerGUI {
 			ts.add(SortedTable.class, "Sorter");
 			
 			jt2 = new JTable2(ts.top());
-			//jt2.setAutoCreateColumnsFromModel(false);
 			
 			ts.findByName("Sorter").setJTable(jt2);
 
@@ -1711,7 +1770,12 @@ class VdbenchExplorerGUI {
 			}));
 			swing.panel.removeAll();
 			swing.panel.add(jsp, BorderLayout.CENTER);
+
+			// We need to change the File menu
+			frame.setJMenuBar(menubar2);
+
 			frame.pack();
+			frame.show();
 		});
 		
 		syntheticcolumn = swing.action(name:'Synthetic column', closure:{
@@ -1740,33 +1804,48 @@ $Revision$
 						JOptionPane.INFORMATION_MESSAGE);
 			}
 		);
+		menubar1 = swing.menuBar(id:'menubar1') {
+			menu("File") {
+				menuItem(action:open)
+				menuItem(action:about)
+				menuItem(action:exit)
+			}
+			menu("Column") {
+				menuItem(action:syntheticcolumn);
+			}			
+		};
+		menubar2 = swing.menuBar(id:'menubar2') {
+			menu("File") {
+				menuItem(action:addf)
+				menuItem(action:remf)
+				menuItem(action:about)
+				menuItem(action:exit)
+			}
+			menu("Column") {
+				menuItem(action:syntheticcolumn);
+			}			
+		};
 
+		init();
+	}
+
+	private void init() {		
+		jt2 = null;
+		ts = new TableStack();
+		plots.each { it.kill() };
+		plots = [];
+		fixedplots.each { it.kill() };
+		fixedplots = [];
+		if (frame) frame.dispose();
+		
 		frame = swing.frame(id:'frame', title:"VdbenchExplorer",
 				locationRelativeTo:null) {
-			menuBar {
-				menu("File") {
-					menuItem(action:open)
-					menuItem(action:addf)
-					menuItem(action:remf)
-					menuItem(action:about)
-					menuItem(action:exit)
-				}
-				menu("Column") {
-					menuItem(action:syntheticcolumn);
-					def t=ts.findByName("Synthetic");
-					if (t) {
-						menu("Enable columns") {
-							t.cols.each {
-								menuItem(name:it.columnHead.name);
-							}
-						};
-					}
-				}
-			}
 			panel(id:'panel') {
-				label("Open Vdbench flatfile.html first!");
+				label("Please open a table file with File->Open!");
 			}
 		}
+
+		frame.setJMenuBar(menubar1);
 
 		frame.pack();
 		frame.show();
