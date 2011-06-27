@@ -46,13 +46,13 @@ enum Type { DATETIME, TIME, LABEL, INT, FLOAT };
  */
 
 /* All kinds of Tables
-*/
+ */
 
 abstract class Table extends AbstractTableModel {
 	String name;
 	String description;
 	def cols=[];
-
+	
 	Table(String n, String d) {
 		name=n;
 		description=d;
@@ -62,38 +62,41 @@ abstract class Table extends AbstractTableModel {
 	int getColumnCount() {
 		return cols.size();
 	}
-
+	
 	String getColumnName(int col) {
 		return cols[col].columnHead.name;
 	}
-
+	
 	int getRowCount() {
 		return cols*.length().max();
 	}
-
+	
 	Object getValueAt(int row, int col) {
 		return cols[col].getRow(row).getTypedVal();
 	}
-
+	
 	boolean isCellEditable(int row, int col) {
 		// Cells are not editable
 		return false;
 	}
-
+	
 	void setValueAt(Object o, int row, int col) {
 		// Do nothing
 	}
-
+	
 	Class getColumnClass(int col) {
-		return cols[col].getRow(0).getTypedVal().class;
+		if (cols[col].getRow(0).getTypedVal() != null) {
+			return cols[col].getRow(0).getTypedVal().class;
+		}
+		return java.lang.String;
 	}
 	
 	// Additional abstract methods
-
+	
 	abstract void update();
 	
 	// Own methods
-
+	
 	void add(Column c) {
 		cols << c;
 	}
@@ -101,11 +104,11 @@ abstract class Table extends AbstractTableModel {
 	Column getColumn(int col) {
 		return cols[col];
 	}
-
+	
 	Column getColumnByName(String name) {
 		return cols.find { it.columnHead.name == name };
 	}
-
+	
 	int getColumnNr(Column c) {
 		def ret=(0..(cols.size()-1)).find { cols[it] == c };
 		if (ret!=null) {
@@ -114,22 +117,22 @@ abstract class Table extends AbstractTableModel {
 			return -1;
 		}
 	}
-
+	
 	Cell[] getRow(int row) {
 		cols*.getRow(row).toList();
 	}
-
+	
 	Cell getCellAt(int row, int col) {
 		return cols[col].getRow(row);
 	}
-
+	
 	String[] boringColumns() {
 		return (String[])[];
 	}
 }
 
 class SimpleTable extends Table {
-
+	
 	SimpleTable() {
 		super("", "");
 	}
@@ -174,13 +177,13 @@ class VdbenchFlatfileTable extends Table {
 		}
 		cols[0].columnHead.description="Time/s";
 	}
-
+	
 	// TODO: reinit VdbenchFlatfileTable
 	void update() {};
-
+	
 	String[] boringColumns() {
 		def list = [ "reqrate", "xfersize", "lunsize", "version", "ks_rate", 
-		             "ks_resp", "ks_svct", "ks_mb", "ks_read%", "ks_bytes" ];
+				"ks_resp", "ks_svct", "ks_mb", "ks_read%", "ks_bytes" ];
 		return list;
 	}
 }
@@ -193,7 +196,7 @@ class SortedTable extends Table {
 	SortedTable(Table t) {
 		this(t, null);
 	}
-
+	
 	SortedTable(Table t, JTable jt) {
 		super(t.name, t.description);
 		this.masterTable=t;
@@ -201,19 +204,19 @@ class SortedTable extends Table {
 		rm = new RowMap();
 		init();
 	}
-
+	
 	private void init() {
 		def c;
 		cols = [];
 		rm.init(masterTable.cols[0].length());
-/*		println "this="+this+" c="+masterTable.getColumnCount()+
-		" r="+masterTable.getRowCount()+" m="+masterTable;
-*/		masterTable.cols.each { col ->
+		/*		println "this="+this+" c="+masterTable.getColumnCount()+
+		 " r="+masterTable.getRowCount()+" m="+masterTable;
+		 */		masterTable.cols.each { col ->
 			c = new ProxyColumn(rm, col);
 			cols << c;
 		}
 	}
-
+	
 	void update() {
 		init();
 		sort();
@@ -222,7 +225,7 @@ class SortedTable extends Table {
 	void setJTable(JTable jt) {
 		this.jt = jt;
 	}
-
+	
 	/* Sort all columns from top to down and from left to right:
 	 * The leftmost column is sorted fully, each right neighbour is only
 	 * sorted among those rows in which the values of the left neighbour 
@@ -238,7 +241,7 @@ class SortedTable extends Table {
 	private void sort() {
 		def mcol, tmp0, tmp1, tmp2, col = 0;
 		def stack = [];
-
+		
 		if (cols[0].length()==0) { 
 			rm.real2virt = [];
 			rm.virt2real = [];
@@ -248,12 +251,12 @@ class SortedTable extends Table {
 		def rowPermutation = (0..cols[0].length()-1).toArray();
 		//println "rP="+rowPermutation;
 		stack << [rowPermutation];
-
+		
 		while (col<cols.size && stack[col].size()<cols[0].length()) {
 			mcol = mapColumn(col);
 			stack[col+1]=[];
 			//println "c="+col;
-
+			
 			tmp0 = [];
 			stack[col].each { range ->
 				//println "r="+range;
@@ -264,7 +267,7 @@ class SortedTable extends Table {
 				}
 				range=range.sort() { a,b ->
 					cols[mcol].getRealRow(a).getTypedVal() <=> 
-					cols[mcol].getRealRow(b).getTypedVal()
+							cols[mcol].getRealRow(b).getTypedVal()
 				};
 				//println "r="+range;
 				/* Don't know why toList() is necessary, but, nevertheless,
@@ -282,9 +285,9 @@ class SortedTable extends Table {
 						tmp1 << it;
 						tmp2 = cols[mcol].getRealRow(it).val;
 						//println "tmp2="+tmp2+" it="+it;
- 					} else {
- 						tmp1 << it;
- 					}
+					} else {
+						tmp1 << it;
+					}
 				};
 				stack[col+1] << tmp1;
 			};
@@ -303,7 +306,7 @@ class SortedTable extends Table {
 		
 		return;
 	}
-
+	
 	int length() {
 		return masterTable.cols[0].length();
 	}
@@ -323,11 +326,11 @@ class RowFilteredTable extends Table {
 	RowMap rm;
 	def closures=[];
 	def filters=[:];
-
+	
 	RowFilteredTable(Table t) {
 		this(t, null);
 	}
-
+	
 	RowFilteredTable(Table t, JTable jt) {
 		super(t.name, t.description);
 		this.masterTable=t;
@@ -335,26 +338,26 @@ class RowFilteredTable extends Table {
 		rm = new RowMap();
 		init();
 	}
-
+	
 	private void init() {
 		def c;
 		cols = [];
 		rm.init(masterTable.cols[0].length());
-/*		println "this="+this+" c="+masterTable.getColumnCount()+
-		" r="+masterTable.getRowCount()+" m="+masterTable;
-*//*		masterTable.cols.each {
-			println "n="+it.columnHead.name+" r="+it.length();
-		}
-*/		masterTable.cols.each { col ->
+		/*		println "this="+this+" c="+masterTable.getColumnCount()+
+		 " r="+masterTable.getRowCount()+" m="+masterTable;
+		 *//*		masterTable.cols.each {
+		 println "n="+it.columnHead.name+" r="+it.length();
+		 }
+		 */		masterTable.cols.each { col ->
 			c = new RowFilteredColumn(rm, col);
 			cols << c;
 			if (!filters[c.columnHead.name]) 
-				{ filters[c.columnHead.name] = [] };
+			{ filters[c.columnHead.name] = [] };
 			c.filtered=(filters[c.columnHead.name].size()>0);
 		}
 		//println "v2r="+rm.virt2real+" r2v="+rm.real2virt;
 	}
-
+	
 	void update() {
 		init();
 		applyFilters();
@@ -373,11 +376,11 @@ class RowFilteredTable extends Table {
 		getColumnByName(cname).filtered = true;
 		return;
 	}
-
+	
 	void addFilter(String cname, String val, boolean inverse) {
 		def c = { row ->
 			boolean ret = 
-				(masterTable.getColumnByName(cname).getRow(row).val == val);
+					(masterTable.getColumnByName(cname).getRow(row).val == val);
 			ret=inverse?!ret:ret;
 			//println "row="+row+" val="+val+" ret="+ret;
 			return ret;
@@ -387,24 +390,24 @@ class RowFilteredTable extends Table {
 		getColumnByName(cname).filtered = true;
 		return;
 	}
-
+	
 	void removeAllFilters() {
 		closures = [];
 		cols.each { it.filter = [] };
 		filters = [:];
 		cols.each { it.filtered = false }
 	}
-
+	
 	void removeColFilters(String name) {
 		filters[name].each { closures.remove(it) };
 		filters[name] = [];
 		getColumnByName(name).filtered=false;
 	}
-
+	
 	void removeColFilters(int col) {
 		removeColFilters(cols[col].columnHead.name);
 	}
-
+	
 	int filterCount() {
 		return closures.size();
 	}
@@ -432,7 +435,7 @@ class RowFilteredTable extends Table {
 		}
 		//println "v2r="+rm.virt2real+" r2v="+rm.real2virt;
 	}
-
+	
 	int length() {
 		return rm.virt2real.size();
 	}
@@ -449,14 +452,14 @@ class ColumnFilteredTable extends Table {
 		cols = masterTable.cols;
 		init();
 	}
-
+	
 	private void init() {
 		def c1;
 		def c2 = cols;
 		cols = [];
-/*		println "this="+this+" c="+masterTable.getColumnCount()+
-			" r="+masterTable.getRowCount()+" m="+masterTable;
-*/		masterTable.cols.each { col ->
+		/*		println "this="+this+" c="+masterTable.getColumnCount()+
+		 " r="+masterTable.getRowCount()+" m="+masterTable;
+		 */		masterTable.cols.each { col ->
 			c1 = c2.find { it.columnHead.name == col.columnHead.name }
 			def b = removed.grep { it.columnHead.name == col.columnHead.name }
 			if (!c1 && !b) {
@@ -475,7 +478,7 @@ class ColumnFilteredTable extends Table {
 			}			
 		};	
 	}
-
+	
 	// Implement abstract method from Table
 	
 	void update() {
@@ -487,7 +490,7 @@ class ColumnFilteredTable extends Table {
 				 */
 				
 				if ((columnsFromExpression(it.formula).toList() -
-						it.baseColumns.toList()).size()==0) {
+				it.baseColumns.toList()).size()==0) {
 					it.update();
 				} else {
 					//println "cols="+cols+" s="+synthetic+" n="+it.columnHead.name+" t="+it;
@@ -497,27 +500,27 @@ class ColumnFilteredTable extends Table {
 		}
 		init();
 	}
-
+	
 	// Own methods
-
+	
 	void addSyntheticColumn(String expr) {
 		addSyntheticColumn(columnsFromExpression(expr), expr);
 	}
-
+	
 	void addSyntheticColumn(Column[] baseCols, String expr) {
 		def c = new SyntheticColumn(baseCols, expr);
 		synthetic << c;
 		cols << c;
 	}
-
+	
 	private Column[] columnsFromExpression(String expr) {
 		def c = [];
 		expr.eachMatch(/\'(.*?)\'/) { match ->
-					c << masterTable.getColumnByName(match[1]); 
+			c << masterTable.getColumnByName(match[1]); 
 		};
 		return (Column[])c;
 	}
-
+	
 	void removeColumn(Column col) {
 		//println "remove "+col.columnHead.name;
 		def realcol = cols.find { it.columnHead.name == col.columnHead.name }
@@ -525,7 +528,7 @@ class ColumnFilteredTable extends Table {
 		cols.remove(realcol);
 		synthetic.remove(realcol);
 	}
-
+	
 	void removeColumnsByNames(String[] names) {
 		def l;
 		names.each { name ->
@@ -541,22 +544,22 @@ class ColumnFilteredTable extends Table {
 
 class MergedTable extends Table {
 	def masterTables;
-
+	
 	MergedTable(Table t) {
 		super(t.name, t.description);
 		masterTables=[t];
 		init();
 	}
-
+	
 	private void init() {		
 		def c1;
 		def c2;
 		def n;
-/*		println "this="+this
-		masterTables.each { 
-			println "  c="+it.columnCount+" r="+it.rowCount+" m="+it;
-		}
-*/		
+		/*		println "this="+this
+		 masterTables.each { 
+		 println "  c="+it.columnCount+" r="+it.rowCount+" m="+it;
+		 }
+		 */		
 		c1 = [];
 		n=0;
 		masterTables.each { t ->
@@ -568,7 +571,7 @@ class MergedTable extends Table {
 			n += t.rowCount;
 		}
 		//println "c1="+c1.size()+" n="+n;
-
+		
 		
 		cols = [];
 		if (masterTables.size()>1) {
@@ -580,34 +583,37 @@ class MergedTable extends Table {
 			}
 			cols << c2;
 		}
-
+		
 		c1.each { c ->
-			def ccc = new ConcatColumn(c, masterTables[0].
-					getColumnByName(c).columnHead.description);
-			masterTables.each { t ->
-				def col = t.cols.
-					find { it.columnHead.name == c };
-				if (col) {
-					ccc.add(t, col);
-				} else {
-					ccc.add(t, new ConstColumn(null, t.rowCount));
+			def ccc;
+			if (masterTables[0].getColumnByName(c) != null) { 
+				ccc = new ConcatColumn(c, masterTables[0].
+						getColumnByName(c).columnHead.description);
+				masterTables.each { t ->
+					def col = t.cols.
+							find { it.columnHead.name == c };
+					if (col) {
+						ccc.add(t, col);
+					} else {
+						ccc.add(t, new ConstColumn(null, t.rowCount));
+					}
 				}
+				cols << ccc;
 			}
-			cols << ccc;
 		}
 	}
-
+	
 	void add(Table t) {
 		masterTables << t;
 		init();
 	}
-
+	
 	void remove(Table t) {
 		masterTables.remove(t);
 		init();
 	}
 	void update() {}
-
+	
 	Table[] listTables() {
 		return masterTables;
 	}
@@ -652,7 +658,7 @@ class MergedTable extends Table {
 }
 
 /* All kinds of columns
-*/
+ */
 
 abstract class Column {
 	private Type columnType = Type.LABEL;
@@ -675,12 +681,12 @@ abstract class Column {
 	abstract int cardinality();
 	abstract String[] distinctVals();
 	abstract double[] getDoubles();
-
+	
 	static Type guessType(String[] l) {
 		if (l.grep(~/-?\d+/).size()==l.size()) {
 			return Type.INT;
 		} else if (l.grep(~/-?\d+\.?\d*([fFdD]|[eEgG]-?\d+)?/).size()==
-			l.size()) {
+		l.size()) {
 			return Type.FLOAT
 		} else if (l.grep(~/\d{1,2}:\d{2}:\d{2}\.\d{3}/).size()==l.size()) {
 			return Type.TIME;
@@ -688,21 +694,21 @@ abstract class Column {
 			return Type.LABEL;
 		}
 	}
-
+	
 	Type getColumnType() {
 		return columnType;
 	}
-
+	
 	void setColumnType(Type t) {
 		columnType = t;
 	}
 	
 	Column add(Column c) {
-		 int row = length();
-		 c*.vals.each {
-			 add(new Cell(this, it));
-		 }
-		 return this;
+		int row = length();
+		c*.vals.each {
+			add(new Cell(this, it));
+		}
+		return this;
 	}
 }
 
@@ -712,7 +718,7 @@ class SimpleColumn extends Column {
 	SimpleColumn(ColumnHead ch) {
 		this.columnHead = ch;
 	}
-
+	
 	SimpleColumn(String head, String desc, String[] vals) {
 		this.columnHead = new ColumnHead(name:head, description:desc);
 		vals.each {
@@ -731,39 +737,39 @@ class SimpleColumn extends Column {
 	void add(Cell c) {
 		this.cells << c;
 	}
-
+	
 	void removeAll() {
 		cells=[];
 	}
-
+	
 	void setRow(int row, Cell c) {
 		cells[row]=c;
 	}
-
+	
 	Cell getRow(int row) {
 		return cells[row];
 	}
-
+	
 	String[] getVals() {
 		return cells*.val;
 	}
-
+	
 	int length() {
 		return cells.size();
 	}
-
+	
 	Type guessType() {
 		return guessType((String[])cells*.val);
 	}
-
+	
 	int cardinality() {
 		return cells*.val.sort().unique().size();
 	}
-
+	
 	String[] distinctVals() {
 		return (String[]) cells*.val.sort().unique();
 	}
-
+	
 	void initSymbols() {
 		// We need a toList(), otherwise sort(), unique() strips the list x
 		symbols = cells*.getTypedVal().toList().sort().unique();
@@ -772,11 +778,11 @@ class SimpleColumn extends Column {
 			l2d[symbols[it]] = (double) it;
 		}
 	}
-
+	
 	double[] getDoubles() {
 		def x = cells*.getTypedVal();
 		double[] t;
-
+		
 		if (columnType == Type.TIME) {
 			def xmin = x*.getTime().min();
 			t = x.collect { it = (double)(it.getTime()-xmin)/1000; };
@@ -798,24 +804,24 @@ class ProxyColumn extends Column {
 		this.rm = rm;
 		this.columnHead = c.columnHead;
 	}
-
+	
 	// Overwritten methods
 	void add(Cell c) {
 		realCol.add(c);
 	}
-
+	
 	void removeAll() {
 		realCol.removeAll();
 	}
-
+	
 	void setRow(int row, Cell c) {
 		realCol.setRow(rm.virt2real(row), c);
 	}
-
+	
 	Cell getRow(int row) {
 		return realCol.getRow(rm.virt2real(row));
 	}
-
+	
 	String[] getVals() {
 		def vals = realCol.getVals();
 		def r = (0..length()-1).collect { rm.virt2real(it) }.toList();
@@ -823,35 +829,35 @@ class ProxyColumn extends Column {
 		//println "R="+r;
 		return vals[r];
 	}
-
+	
 	int length() {
 		return rm.virt2real.size();
 	}
-
+	
 	Type guessType() {
 		return realCol.guessType();
 	}
-
+	
 	int cardinality() {
 		return getVals().toList().sort().unique().size();
 	}
-
+	
 	String[] distinctVals() {
 		return (String[]) getVals().toList().sort().unique();
 	}
-
+	
 	Type getColumnType() {
 		return realCol.columnType;
 	}
-
+	
 	void setColumnType(Type t) {
 		realCol.columnType=t;
 	}
-
+	
 	Object[] getSymbols() {
 		return realCol.symbols;
 	}
-
+	
 	HashMap getL2d() {
 		return realCol.l2d;
 	}
@@ -859,11 +865,11 @@ class ProxyColumn extends Column {
 	HashMap getD2l() {
 		return realCol.d2l;
 	}
-
+	
 	boolean isPlotted() {
 		return realCol.plotted;
 	}
-
+	
 	void setPlotted(boolean t) {
 		realCol.plotted = t;
 	}
@@ -871,7 +877,7 @@ class ProxyColumn extends Column {
 	boolean isGroupby() {
 		return realCol.groupby;
 	}
-
+	
 	void setGroupby(boolean t) {
 		realCol.groupby = t;
 	}
@@ -888,7 +894,7 @@ class ProxyColumn extends Column {
 		}
 		return dv;
 	}
-
+	
 	// Own methods
 	Cell getRealRow(int row) {
 		return realCol.getRow(row);
@@ -910,7 +916,7 @@ class SyntheticColumn extends SimpleColumn {
 	private String formula;
 	private Binding b;
 	private GroovyShell gs;
-
+	
 	SyntheticColumn(Column[] cols, String e) {
 		super(new ColumnHead(name:e, description:e));
 		assert cols.grep { it.length() != cols[0].length() }.size() == 0;
@@ -920,12 +926,12 @@ class SyntheticColumn extends SimpleColumn {
 		gs = new GroovyShell(b);
 		init();
 	}
-
+	
 	private void init() {
 		def vals;
 		def expr = formula.replaceAll(/\'(.*?)\'/, /col['$1'][it]/);
 		def expr2 = "(0.."+(baseColumns[0].length()-1)+
-			").collect { $expr }";
+				").collect { $expr }";
 		//println formula+" - "+expr+" - "+expr2;
 		cells = [];
 		b.col=[:];
@@ -948,16 +954,16 @@ class SyntheticColumn extends SimpleColumn {
 		}
 		columnType=this.guessType();
 	}
-
+	
 	void update() {
 		init();
 	}
-
+	
 	void replaceBaseColumns(Column[] cols) {
 		this.baseColumns = cols;
 		init();
 	}
-
+	
 	// Overwritten methods
 	
 	void add(Cell c) {
@@ -971,20 +977,20 @@ class SyntheticColumn extends SimpleColumn {
 	void removeAll() {
 		throw(new Exception("You can not modify synthetic columns"));
 	}
-
+	
 	boolean isFiltered() {
 		// Since this is a new column, it is never row filtered. 
 		return false;
 	}
-
+	
 	Column[] getBaseColumns() {
 		return baseColumns;
 	}
-
+	
 	String getFormula() {
 		return formula;
 	}
-
+	
 }
 
 class ConcatColumn extends SimpleColumn {
@@ -992,13 +998,13 @@ class ConcatColumn extends SimpleColumn {
 	def tables = [];
 	def cols = [:];
 	int length = 0;
-
+	
 	ConcatColumn(String name, String desc) {
 		super(new ColumnHead(name:name, description:desc));
 	}
-
+	
 	// Own methods
-
+	
 	void add(Table t, Column c) {
 		def ls = length;
 		length += t.rowCount;
@@ -1011,7 +1017,7 @@ class ConcatColumn extends SimpleColumn {
 		columnType = guessType((String[])this.cells*.val);
 		//println "t="+tables+" cls="+cols+" rM="+rowMap;
 	}
-
+	
 	void remove(Table t) {
 		cols.remove(t);
 		tables.remove(t);
@@ -1019,7 +1025,7 @@ class ConcatColumn extends SimpleColumn {
 		rowMap.remove(t);
 		columnType = guessType((String[])this.cells*.val);
 	}
-
+	
 	void update() {
 		cells = [];
 		tables.each {
@@ -1050,9 +1056,9 @@ class ConstColumn extends Column {
 	int cardinality() { return 1 }
 	String[] distinctVals() { return (String[])[dummycell.val] }
 	double[] getDoubles() { 
-  		def x = dummycell.getTypedVal();
+		def x = dummycell.getTypedVal();
 		double t;
-
+		
 		if (columnType == Type.TIME) {
 			t = x/1000;
 		} else if (columnType == Type.LABEL) {
@@ -1061,16 +1067,16 @@ class ConstColumn extends Column {
 			t = (double) x;
 		}
 		return (double[]) (1..length).collect { t };
-    }
+	}
 }
 
 /* Helper classes
-*/
+ */
 
 class RowMap {
 	def real2virt = [];
 	def virt2real = [];
-
+	
 	RowMap() {}
 	
 	RowMap(int n) {
@@ -1094,13 +1100,13 @@ class RowMap {
 	int virt2real(int row) {
 		return virt2real[row];
 	}
-
+	
 	void map(int v, int r) {
 		virt2real[v]=r;
 		real2virt[r]=v;
-
+		
 	}
-
+	
 	void clear() {
 		real2virt = [:];
 		virt2real = [:];
@@ -1115,43 +1121,43 @@ class ColumnHead {
 class Cell {
 	Column column;
 	String val;
-
+	
 	Cell(Column c, String val) {
 		this.column = c;
 		this.val = val;	
 	}
-
+	
 	Type getType() {
 		return column.columnType;
 	}
-
+	
 	Object getTypedVal() {
 		if (val == null) { return null }
 		switch(column.columnType) {
-		case Type.LABEL:
-			return (String)val;
-			break;
-		case Type.INT:
-			return val.toInteger();
-			break;
-		case Type.FLOAT:
-			return val.toDouble();
-			break;
-		case Type.DATETIME:
-			return null;
-			break;
-		case Type.TIME:
-			if (val =~ /\d{1,2}:\d{2}:\d{2}\.\d{3}/) {
-				return Date.parse("HH:mm:ss.SSS", val);
-			}
-			return (Date)val;
-			break;
+			case Type.LABEL:
+				return (String)val;
+				break;
+			case Type.INT:
+				return val.toInteger();
+				break;
+			case Type.FLOAT:
+				return val.toDouble();
+				break;
+			case Type.DATETIME:
+				return null;
+				break;
+			case Type.TIME:
+				if (val =~ /\d{1,2}:\d{2}:\d{2}\.\d{3}/) {
+					return Date.parse("HH:mm:ss.SSS", val);
+				}
+				return (Date)val;
+				break;
 		}
 	}
 }
 
 /* The graphics
-*/
+ */
 
 class Plot {
 	JFrame plotFrame;
@@ -1169,28 +1175,28 @@ class Plot {
 	Graph_2D graph;
 	GraphSettings gs;
 	Dimension box;
-
+	
 	Plot() {
 		plotFrame = new JFrame();
 		p = new JPanel(new BorderLayout());
 		plotFrame.getContentPane().add(p);
 		gs = new GraphSettings();
 	}	
-
+	
 	Plot(Column c1, Column c2) {
 		this(c1, c2, null);
 	}	
-
+	
 	Plot(Column c1, Column c2, Column g) {
 		this();
 		assert c1.length() == c2.length();
 		this.cx = c1;
 		this.cy = c2;
 		this.groupby = g;
-
+		
 		init();
 	}	
-
+	
 	void reinit(Column c1, Column c2) {
 		assert c1.length() == c2.length();
 		this.cx = c1;
@@ -1207,7 +1213,7 @@ class Plot {
 		this.groupby = g;
 		init();
 	}
-
+	
 	void redraw() {
 		init();
 	}
@@ -1216,7 +1222,7 @@ class Plot {
 		//println "px="+cx.columnHead.name+" py="+cy.columnHead.name;
 		double[] x = cx.getDoubles();
 		double[] y = cy.getDoubles();
-
+		
 		p.removeAll();
 		
 		//GraphSettings gs = new GraphSettings();
@@ -1225,7 +1231,7 @@ class Plot {
 		gs.setMaxValue(GraphSettings.X_AXIS, x.toList().max());
 		gs.setMinValue(GraphSettings.Y_AXIS, y.toList().min());
 		gs.setMaxValue(GraphSettings.Y_AXIS, y.toList().max());
-
+		
 		GraphLabel l=new GraphLabel(GraphLabel.XLABEL, 
 				cx.columnHead.description);
 		gs.addLabel(l);
@@ -1262,14 +1268,14 @@ class Plot {
 		} else {
 			gs.setDrawTicLabels(GraphSettings.Y_AXIS, true);
 		}		
-
+		
 		plotFrame.title=(description!=null) ? description :
 				cx.columnHead.name+" - "+cy.columnHead.name;
 		plotFrame.addWindowListener(new WindowAdapter2({
-		      plotFrame.dispose();
-		      plotFrame = null;
+			plotFrame.dispose();
+			plotFrame = null;
 		}));
-
+		
 		def da = [];
 		if (groupby!=null) {
 			int count=0;
@@ -1305,10 +1311,10 @@ class Plot {
 			d.drawLegend=false;
 			da << d;
 		}
-
+		
 		Vector v = new Vector();
 		da.each { it -> v.add(it) };
-
+		
 		if (!box) {
 			box = new Dimension(400,300);
 		} else {
@@ -1316,26 +1322,26 @@ class Plot {
 		}	
 		graph = new Graph_2D(gs);
 		graph.show(v);
-
+		
 		p.setPreferredSize(box);
 		p.add(graph,BorderLayout.CENTER);
 		plotFrame.pack();
 		plotFrame.show();
 	}
-
+	
 	void kill() {
 		if (plotFrame!=null) {
 			plotFrame.dispose();
 			plotFrame=null;
 		}
 	}
-
+	
 	private Color gencolor(int i, int n) {
 		float f = (float)((i+1)/(n+2));
 		return new Color(Color.HSBtoRGB(f, (float)1.0, (float)1.0));
-/*		return new Color((float)(i+1)/(n+2), (float)(i+1)/(n+2), 
-				(float)(i+1)/(n+2));
-*/	}
+		/*		return new Color((float)(i+1)/(n+2), (float)(i+1)/(n+2), 
+		 (float)(i+1)/(n+2));
+		 */	}
 }
 
 /* Listeners
@@ -1353,16 +1359,16 @@ class ResizeListener extends ComponentAdapter {
 	public void componentResized(ComponentEvent e) {
 		// Don't forget the parantheses!
 		closure();
-    }
+	}
 }
 
 class WindowAdapter2 extends WindowAdapter {
 	Closure closure;
-
+	
 	WindowAdapter2(Closure c) {
 		closure=c;
 	}
-
+	
 	void windowClosing(WindowEvent e) {
 		closure(e);
 	}
@@ -1370,33 +1376,33 @@ class WindowAdapter2 extends WindowAdapter {
 
 class PopupListener extends MouseAdapter {
 	Closure closure;
-
+	
 	PopupListener(Closure c) {
 		closure=c;
 	}
 	
-    public void mousePressed(MouseEvent e) {
-        maybeShowPopup(e);
-    }
-
-    public void mouseReleased(MouseEvent e) {
-        maybeShowPopup(e);
-    }
-
-    private void maybeShowPopup(MouseEvent e) {
-        if (e.isPopupTrigger()) {
-        	closure(e);
-        }
-    }
+	public void mousePressed(MouseEvent e) {
+		maybeShowPopup(e);
+	}
+	
+	public void mouseReleased(MouseEvent e) {
+		maybeShowPopup(e);
+	}
+	
+	private void maybeShowPopup(MouseEvent e) {
+		if (e.isPopupTrigger()) {
+			closure(e);
+		}
+	}
 }
 
 class TCMListener implements TableColumnModelListener {
 	Closure closure;
-
+	
 	TCMListener(Closure c) {
 		closure=c;
 	}
-
+	
 	void columnAdded(TableColumnModelEvent e) {}
 	void columnRemoved(TableColumnModelEvent e) {}
 	void columnChanged(TableColumnModelEvent e) {}
@@ -1421,33 +1427,33 @@ class TCMListener implements TableColumnModelListener {
  */
 
 class CustomHeaderRenderer extends DefaultTableCellRenderer 
-	implements UIResource {
-    public Component getTableCellRendererComponent(JTable table, Object value,
-             boolean isSelected, boolean hasFocus, int row, int column) {
-    	if (table != null) {
-    		JTableHeader header = table.getTableHeader();
-    		if (header != null) {
-    	        int col=table.convertColumnIndexToModel(column);
-
-    	        if (((Table)table.model).getColumn(col).plotted) {
-    				if (((Table)table.model).getColumn(col).groupby) {
-    					if (((Table)table.model).getColumn(col).filtered) {
-    						setForeground(Color.ORANGE);
-    						setBackground(header.foreground);
-    					} else {
-    						setForeground(Color.YELLOW);
-    						setBackground(header.foreground);    						
-    					}
-    				} else {
-    					if (((Table)table.model).getColumn(col).filtered) {
-    						setForeground(Color.RED);
-    						setBackground(header.foreground);
-    					} else {
-    						setForeground(header.background);
-    						setBackground(header.foreground);    						
-    					}
-    				}
-    			} else if (((Table)table.model).getColumn(col).groupby) {
+implements UIResource {
+	public Component getTableCellRendererComponent(JTable table, Object value,
+	boolean isSelected, boolean hasFocus, int row, int column) {
+		if (table != null) {
+			JTableHeader header = table.getTableHeader();
+			if (header != null) {
+				int col=table.convertColumnIndexToModel(column);
+				
+				if (((Table)table.model).getColumn(col).plotted) {
+					if (((Table)table.model).getColumn(col).groupby) {
+						if (((Table)table.model).getColumn(col).filtered) {
+							setForeground(Color.ORANGE);
+							setBackground(header.foreground);
+						} else {
+							setForeground(Color.YELLOW);
+							setBackground(header.foreground);    						
+						}
+					} else {
+						if (((Table)table.model).getColumn(col).filtered) {
+							setForeground(Color.RED);
+							setBackground(header.foreground);
+						} else {
+							setForeground(header.background);
+							setBackground(header.foreground);    						
+						}
+					}
+				} else if (((Table)table.model).getColumn(col).groupby) {
 					if (((Table)table.model).getColumn(col).filtered) {
 						setBackground(Color.ORANGE);
 						setForeground(header.foreground);						
@@ -1455,7 +1461,7 @@ class CustomHeaderRenderer extends DefaultTableCellRenderer
 						setBackground(Color.YELLOW);
 						setForeground(header.foreground);
 					}
-    	        } else {
+				} else {
 					if (((Table)table.model).getColumn(col).filtered) {
 						setBackground(Color.RED);						
 						setForeground(header.foreground);
@@ -1463,15 +1469,15 @@ class CustomHeaderRenderer extends DefaultTableCellRenderer
 						setBackground(header.background);
 						setForeground(header.foreground);
 					}
-    	        }
-    		}
-    	}
-
-        setText((value == null) ? "" : value.toString());
-        setToolTipText(getText());
-        setBorder(UIManager.getBorder("TableHeader.cellBorder"));
-        return this;
-    }
+				}
+			}
+		}
+		
+		setText((value == null) ? "" : value.toString());
+		setToolTipText(getText());
+		setBorder(UIManager.getBorder("TableHeader.cellBorder"));
+		return this;
+	}
 }
 
 /* End of Renderers
@@ -1482,36 +1488,36 @@ class JTable2 extends JTable {
 	private int margin = 5;
 	private boolean ready_for_init=false;
 	private CustomHeaderRenderer tcr;
-
+	
 	JTable2(TableModel tm) {
 		super(tm);
 		tcr = new CustomHeaderRenderer();
 		ready_for_init=true;
 		init();
 	}
-
+	
 	private void init() {
 		if (!ready_for_init) { return; }
 		
 		this.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-
+		
 		0.upto(this.model.columnCount-1) { col ->
 			if (col < this.columnModel.columnCount) {
 				this.columnModel.getColumn(col).preferredWidth=
-					this.columnWidth(col);
+						this.columnWidth(col);
 				this.columnModel.getColumn(col).headerRenderer=tcr;
 			}
 		}
 	}
-
+	
 	void reinit() {
 		init();
 	}
-
+	
 	int columnWidth(int col) {
 		int w = 0;
 		def tc = this.columnModel.getColumn(col);
-
+		
 		// TODO: What is the equivalent of prepareRenderer for the header?
 		// new JTableHeader(tcm).getHeaderRect(col) ?
 		def r = tc.headerRenderer;
@@ -1534,9 +1540,9 @@ class JTable2 extends JTable {
 class SimpleFileFilter extends javax.swing.filechooser.FileFilter {
 	private String classFilter;
 	private static supported_list = [
-         "Vdbench":VdbenchFlatfileTable.class
-     ];
-
+	"Vdbench":VdbenchFlatfileTable.class
+	];
+	
 	SimpleFileFilter(String cl) {
 		classFilter = cl;
 	}
@@ -1545,7 +1551,7 @@ class SimpleFileFilter extends javax.swing.filechooser.FileFilter {
 		if (f.directory) {
 			return true;
 		}
-
+		
 		if (supported_list[classFilter] == VdbenchFlatfileTable.class) {
 			if (f.name == "flatfile.html") {
 				return true;
@@ -1554,52 +1560,52 @@ class SimpleFileFilter extends javax.swing.filechooser.FileFilter {
 			}
 		}
 	}
-
+	
 	String getDescription() {
 		return classFilter;
 	}
-
+	
 	Class getTableClass() {
 		return supported_list[classFilter];
 	}
-
+	
 	static String[] supported() { return supported_list.keySet() }
 }
 
 class TableStack {
 	def tables = [];
 	def t2 = [:]
-
+	
 	void updateUpwardsFrom(Table t) {
 		int i = (0..(tables.size()-1)).find { tables[it] == t };
 		i.upto(tables.size()-1) {
 			tables[it].update();
 		}
 	}
-
+	
 	void add(Table t) {
 		tables << t;
 	}
-
+	
 	void add(Table t, String name) {
 		t2[name] = t;
 		tables << t;
 	}
-
+	
 	void add(Class c) {
 		tables << c.newInstance(tables[-1]);
 	}
-
+	
 	void add(Class c, String name) {
 		def t = c.newInstance(tables[-1]);
 		t2[name] = t;
 		tables << t;
 	}
-
+	
 	Table top() {
 		return tables[-1];
 	}
-
+	
 	Table findByName(String s) {
 		return t2[s];
 	}
@@ -1617,127 +1623,127 @@ class VdbenchExplorerGUI {
 	private Column groupby = null;
 	private java.util.Timer redrawRequest = null;
 	private TableStack ts;
-
+	
 	private final int margin = 10;
 	private final int groupbylimit = 100;
 	private final int delay = 500;
-
+	
 	private final def swing;
-    private final def exit;
-    private final def open;
-    private final def addf;
-    private final def remf;
-    private final def openDialog;
-    private final def about;
-    private final def syntheticcolumn;
-    private final def removecolumn;
-    private final def menubar1;
-    private final def menubar2;
-    
+	private final def exit;
+	private final def open;
+	private final def addf;
+	private final def remf;
+	private final def openDialog;
+	private final def about;
+	private final def syntheticcolumn;
+	private final def removecolumn;
+	private final def menubar1;
+	private final def menubar2;
+	
 	VdbenchExplorerGUI() {
 		swing = new SwingBuilder();
-
+		
 		openDialog  = swing.fileChooser(
 				dialogTitle:"Choose a table file", 
-                id:"openDialog", acceptAllFileFilterUsed:false,
-                fileSelectionMode: JFileChooser.FILES_ONLY) {};                
+				id:"openDialog", acceptAllFileFilterUsed:false,
+				fileSelectionMode: JFileChooser.FILES_ONLY) {};                
 		exit = swing.action(name:'Exit', closure:{System.exit(0)});
 		addf = swing.action(name:'Add Table', closure:{
-            if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
-            	return;
-
-            def file = openDialog.selectedFile.path;
-            def t1 = openDialog.fileFilter.tableClass.newInstance(file);
-            
-            def t = ts.findByName("Merger");
-            t.add(t1);
-            ts.updateUpwardsFrom(t);
-            /* Hack: currently, with fireTableStructureChanged()
-             * we lose the column order. So we only fire the event
-             * when absolutely necessary, i.e. when we add the  
-             * Dataset column, i.e. when we add the second
-             * table.
-             */	            
-            def tl = t.listTables();
-            if (tl.size()==2) {
-            	jt2.model.fireTableStructureChanged();
-            } else {
-            	jt2.model.fireTableDataChanged();            	
-            }
+			if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
+				return;
+			
+			def file = openDialog.selectedFile.path;
+			def t1 = openDialog.fileFilter.tableClass.newInstance(file);
+			
+			def t = ts.findByName("Merger");
+			t.add(t1);
+			ts.updateUpwardsFrom(t);
+			/* Hack: currently, with fireTableStructureChanged()
+			 * we lose the column order. So we only fire the event
+			 * when absolutely necessary, i.e. when we add the  
+			 * Dataset column, i.e. when we add the second
+			 * table.
+			 */	            
+			def tl = t.listTables();
+			if (tl.size()==2) {
+				jt2.model.fireTableStructureChanged();
+			} else {
+				jt2.model.fireTableDataChanged();            	
+			}
 			jt2.reinit();
 			updatePlots();
 		});
 		remf = swing.action(name:'Remove Table', closure:{
-            def t = ts.findByName("Merger");
-            def tl = t.listTables();
-            def ret = JOptionPane.showInputDialog(null, 
-            		"Choose a table to remove", 
-            		"Remove Table", JOptionPane.QUESTION_MESSAGE, 
-            		null, (Object[]) tl*.name, null);
-            if (!ret) return;
-
-            def t1=tl.find { it.name == ret };
-            if (tl.size()>1) {
-	            t.remove(t1);
-	            ts.updateUpwardsFrom(t);
-	            /* Hack: currently, with fireTableStructureChanged()
-	             * we lose the column order. So we only fire the event
-	             * when absolutely necessary, i.e. when we lose the 
-	             * Dataset column, i.e. when we remove the last but one
-	             * table.
-	             */	            
-	            if (tl.size()==2) {
-	            	jt2.model.fireTableStructureChanged();
-	            } else {
-	            	jt2.model.fireTableDataChanged();
-	            }
+			def t = ts.findByName("Merger");
+			def tl = t.listTables();
+			def ret = JOptionPane.showInputDialog(null, 
+					"Choose a table to remove", 
+					"Remove Table", JOptionPane.QUESTION_MESSAGE, 
+					null, (Object[]) tl*.name, null);
+			if (!ret) return;
+			
+			def t1=tl.find { it.name == ret };
+			if (tl.size()>1) {
+				t.remove(t1);
+				ts.updateUpwardsFrom(t);
+				/* Hack: currently, with fireTableStructureChanged()
+				 * we lose the column order. So we only fire the event
+				 * when absolutely necessary, i.e. when we lose the 
+				 * Dataset column, i.e. when we remove the last but one
+				 * table.
+				 */	            
+				if (tl.size()==2) {
+					jt2.model.fireTableStructureChanged();
+				} else {
+					jt2.model.fireTableDataChanged();
+				}
 				jt2.reinit();
 				updatePlots();
-            } else {
-            	init();
-            }
-        });
+			} else {
+				init();
+			}
+		});
 		open = swing.action(name:'Open', closure:{			
-            SimpleFileFilter.supported().each { 
-            	openDialog.addChoosableFileFilter(
-            			new SimpleFileFilter(it));
-            }
-
-            if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
-            	return;
-
-            def file = openDialog.selectedFile.path;
-            def t1 = openDialog.fileFilter.tableClass.newInstance(file);
-            
+			SimpleFileFilter.supported().each { 
+				openDialog.addChoosableFileFilter(
+						new SimpleFileFilter(it));
+			}
+			
+			if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
+				return;
+			
+			def file = openDialog.selectedFile.path;
+			def t1 = openDialog.fileFilter.tableClass.newInstance(file);
+			
 			ts.add(t1, "Base");
 			ts.add(MergedTable.class, "Merger");
 			ts.add(ColumnFilteredTable.class, "Synthetic");
 			ts.findByName("Synthetic").
-				removeColumnsByNames(ts.findByName("Base").boringColumns());
+					removeColumnsByNames(ts.findByName("Base").boringColumns());
 			ts.add(RowFilteredTable.class, "RowFilter");
 			ts.add(SortedTable.class, "Sorter");
 			
 			jt2 = new JTable2(ts.top());
 			
 			ts.findByName("Sorter").setJTable(jt2);
-
+			
 			// Registering for right-clicks on the TableHeader
 			jt2.tableHeader.addMouseListener(new PopupListener({
 				// Find the column in which the MouseEvent was triggered
 				int col = jt2.getColumnModel().getColumnIndexAtX(it.getX());
 				createPopupMenu(jt2.convertColumnIndexToModel(col)).
-					show((Component) it.getSource(), it.getX(), it.getY());
+						show((Component) it.getSource(), it.getX(), it.getY());
 			}));
-
+			
 			jt2.addMouseListener(new PopupListener({
 				// Find the cell in which the MouseEvent was triggered
 				int row = jt2.rowAtPoint(it.point);
 				int col = jt2.convertColumnIndexToModel(
 						jt2.columnAtPoint(it.point));
 				createPopupMenuCell(row, col).
-					show((Component) it.getSource(), it.getX(), it.getY());
+						show((Component) it.getSource(), it.getX(), it.getY());
 			}))
-
+			
 			jt2.columnModel.addColumnModelListener(new TCMListener({
 				/* When a column is dragged across the table we don't want
 				 * to recalculate the table and every plot for every 
@@ -1770,39 +1776,39 @@ class VdbenchExplorerGUI {
 			}));
 			swing.panel.removeAll();
 			swing.panel.add(jsp, BorderLayout.CENTER);
-
+			
 			// We need to change the File menu
 			frame.setJMenuBar(menubar2);
-
+			
 			frame.pack();
 			frame.show();
 		});
 		
 		syntheticcolumn = swing.action(name:'Synthetic column', closure:{
-				def formula = JOptionPane.showInputDialog(null, 
-						"Please enter formula", 
-						"Formula", 
-						JOptionPane.QUESTION_MESSAGE, null, null, "");
-				if (formula) {
-					def t = ts.findByName("Synthetic");
-					t.addSyntheticColumn(formula);
-					ts.updateUpwardsFrom(t);
-					jt2.model.fireTableStructureChanged();
-					jt2.reinit();
-					jt2.doLayout();
-				}
+			def formula = JOptionPane.showInputDialog(null, 
+					"Please enter formula", 
+					"Formula", 
+					JOptionPane.QUESTION_MESSAGE, null, null, "");
+			if (formula) {
+				def t = ts.findByName("Synthetic");
+				t.addSyntheticColumn(formula);
+				ts.updateUpwardsFrom(t);
+				jt2.model.fireTableStructureChanged();
+				jt2.reinit();
+				jt2.doLayout();
 			}
+		}
 		);
-
+		
 		about = swing.action(name:'About', closure:{
-				JOptionPane.showMessageDialog(frame, '''
+			JOptionPane.showMessageDialog(frame, '''
 (c) $Date$ Baltic Online Computer GmbH 
-By:  Jochen Fritzenkštter
+By:  Jochen Fritzenkï¿½tter
 $URL$
 $Revision$
 						''', "About", 
-						JOptionPane.INFORMATION_MESSAGE);
-			}
+					JOptionPane.INFORMATION_MESSAGE);
+		}
 		);
 		menubar1 = swing.menuBar(id:'menubar1') {
 			menu("File") {
@@ -1825,10 +1831,10 @@ $Revision$
 				menuItem(action:syntheticcolumn);
 			}			
 		};
-
+		
 		init();
 	}
-
+	
 	private void init() {		
 		jt2 = null;
 		ts = new TableStack();
@@ -1840,17 +1846,17 @@ $Revision$
 		
 		frame = swing.frame(id:'frame', title:"VdbenchExplorer",
 				locationRelativeTo:null) {
-			panel(id:'panel') {
-				label("Please open a table file with File->Open!");
-			}
-		}
-
+					panel(id:'panel') {
+						label("Please open a table file with File->Open!");
+					}
+				}
+		
 		frame.setJMenuBar(menubar1);
-
+		
 		frame.pack();
 		frame.show();
 	}
-
+	
 	JPopupMenu createPopupMenuCell(int row, int col) {
 		def fT = ts.findByName("RowFilter");
 		def popup = swing.popupMenu(id:"popupcell") {
@@ -1887,7 +1893,7 @@ $Revision$
 				def tag=jt2.model.getColumn(col).plotted?"Don't plot":'Plot';
 				action(name:tag, closure: {
 					jt2.model.getColumn(col).plotted=
-						!jt2.model.getColumn(col).plotted;
+							!jt2.model.getColumn(col).plotted;
 					//println(jt2.model.getColumn(col).columnHead.description);
 					updatePlots();
 					/* Tried out many things to instantly redraw the column 
@@ -1906,7 +1912,7 @@ $Revision$
 				action(name:tag, closure: {
 					// TODO: Allow larger cardinalities by creating ranges
 					if ((jt2.model.getColumn(col).cardinality()>groupbylimit) &&
-							(!jt2.model.getColumn(col).groupby)) {
+					(!jt2.model.getColumn(col).groupby)) {
 						JOptionPane.showMessageDialog(frame, 
 								"Columns' cardinality is too large ("+
 								jt2.model.getColumn(col).cardinality()+">"+
@@ -1916,7 +1922,7 @@ $Revision$
 					}
 					
 					jt2.model.getColumn(col).groupby=
-						!jt2.model.getColumn(col).groupby;
+							!jt2.model.getColumn(col).groupby;
 					
 					// TODO: Allow more columns for grouping
 					// Remove groupby for other columns
@@ -1925,7 +1931,7 @@ $Revision$
 							jt2.model.getColumn(it).groupby=false;
 						}
 					}
-
+					
 					if (jt2.model.getColumn(col).groupby) {
 						groupby=jt2.model.getColumn(col);
 						plots.each { plot -> 
@@ -1937,7 +1943,7 @@ $Revision$
 							plot.groupby(null);
 						}
 					};
-
+					
 					/* Tried many things to instantly redraw the column 
 					 * headers: 
 					 * jt2.revalidate(), jt2.repaint()
@@ -1978,12 +1984,12 @@ $Revision$
 			}
 		};		
 	}
-
+	
 	void updatePlots() {
 		int count=0;
 		def xcol=-1;
 		def ycols=[];
-
+		
 		// Determine the plottable columns
 		// The first column that is checked as plot is always the x column
 		0.upto(jt2.model.getColumnCount()-1) { col ->
@@ -1999,7 +2005,7 @@ $Revision$
 				count++;
 			}
 		}
-
+		
 		// Remove all plots that are not needed anymore and put them onto
 		// the reuse stack
 		def plots2 = [];
@@ -2016,7 +2022,7 @@ $Revision$
 				reuse << plot;
 				return;
 			}
-
+			
 			boolean found = false
 			ycols.each { ycol ->
 				if (ycol==plot.cy) {
@@ -2040,7 +2046,7 @@ $Revision$
 		ycols.each { ycol ->
 			//println "ycol: "+ycol;
 			//println "plots: "+plots.size+" reuse: "+reuse.size;
-
+			
 			boolean found = false;
 			plots2.each { plot ->
 				//println plot;
@@ -2050,7 +2056,7 @@ $Revision$
 					return;
 				}
 			}
-
+			
 			if (!found) {
 				// Reuse plots from the reuse stack before creating new ones
 				if (reuse.size>0) {
@@ -2069,7 +2075,7 @@ $Revision$
 		}
 		//println "After2: "+plots;
 		//println "Reuse2: "+reuse;
-
+		
 		reuse.each { plot ->
 			plot.kill();
 		}
