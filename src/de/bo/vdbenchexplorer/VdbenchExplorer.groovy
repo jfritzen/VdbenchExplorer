@@ -101,6 +101,18 @@ abstract class Table extends AbstractTableModel {
 		cols << c;
 	}
 	
+	void add(Row r) {
+		add(r.cells);
+	}
+	
+	void add(Cell[] row) {
+		def c = 0;
+		row.each { cell ->
+			cols[c++].add(cell);
+		}
+		//print();
+	}
+	
 	Column getColumn(int col) {
 		return cols[col];
 	}
@@ -129,6 +141,21 @@ abstract class Table extends AbstractTableModel {
 	String[] boringColumns() {
 		return (String[])[];
 	}
+	
+	void print() {
+		cols.each {
+			print it.columnHead.name+"\t";
+		}
+		println "";
+		
+		0.upto(getRowCount()-1) { r ->
+			cols.each { c->
+				print c.getRow(r).val+"\t";
+			}
+			println "";
+		}
+	}
+	
 }
 
 class SimpleTable extends Table {
@@ -142,6 +169,50 @@ class SimpleTable extends Table {
 	}
 	
 	void update() {};
+}
+
+/* A table that is fully sorted and in that every row differs at least in 
+ * one column from all other rows.
+ */
+class SortedUniqueTable extends Table {
+		
+	SortedUniqueTable(Table t) {
+		this("", "", t);
+	}
+
+	SortedUniqueTable(String n, String d, Table t) {
+		super(n, d);
+		extract_unique_rows(t);
+	}
+	
+	void update() {
+		extract_unique_rows(t);
+	};
+	
+	private void extract_unique_rows(Table t) {
+		cols = [];
+		0.upto(t.getColumnCount()-1) { it ->
+			cols << new SimpleColumn(t.getColumn(it).getColumnHead()); 
+		}
+		if (t.getRowCount() > 0) {
+			SortedTable sot = new SortedTable(t);
+			//t.print();
+			//sot.print();
+			def row = sot.getRow(0);
+			add(row);
+			def r = 1;
+			while (r < sot.getRowCount()) {
+				//println r+" "+sot.getRowCount();
+				def nrow = sot.getRow(r);
+				if (Row.diff(row, nrow)) {
+					row=nrow;
+					add(row);
+				}
+				r++;
+			}
+		}
+	}
+		
 }
 
 class VdbenchFlatfileTable extends Table {
@@ -203,6 +274,7 @@ class SortedTable extends Table {
 		this.jt=jt;
 		rm = new RowMap();
 		init();
+		sort();
 	}
 	
 	private void init() {
@@ -620,7 +692,8 @@ class MergedTable extends Table {
 	
 	static HashMap makeShortNames(names) {
 		def hm = [:];
-		int mp, ms;
+		int mp = 0;
+		int ms = 0;
 		int l;
 		String wp = names[0];
 		String ws = names[0].reverse();
@@ -1118,6 +1191,25 @@ class ColumnHead {
 	String description;
 }
 
+class Row {
+	Cell[] cells;
+	
+	Row(Cell[] cells) {
+		this.cells = cells;
+	}
+	
+	static boolean diff(Cell[] r1, Cell[] r2) {
+		assert r1.size()==r2.size();
+		for (it in 0..(r1.size()-1)) { 
+			//println r1[it].val+" "+r2[it].val;
+			if (r1[it].val != r2[it].val) {
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
 class Cell {
 	Column column;
 	String val;
@@ -1170,7 +1262,7 @@ class Plot {
 	 * Must be of same size as cx;
 	 * If null do not use groupby;
 	 */
-	Column groupby = null;
+	Column[] groupby = null;
 	String description = null;
 	Graph_2D graph;
 	GraphSettings gs;
@@ -1187,13 +1279,12 @@ class Plot {
 		this(c1, c2, null);
 	}	
 	
-	Plot(Column c1, Column c2, Column g) {
+	Plot(Column c1, Column c2, Column[] g) {
 		this();
 		assert c1.length() == c2.length();
 		this.cx = c1;
 		this.cy = c2;
 		this.groupby = g;
-		
 		init();
 	}	
 	
@@ -1204,12 +1295,12 @@ class Plot {
 		init();
 	}
 	
-	void reinit(Column c1, Column c2, Column g) {
+	void reinit(Column c1, Column c2, Column[] g) {
 		this.groupby = g;
 		reinit(c1, c2);
 	}
 	
-	void groupby(Column g) {
+	void groupby(Column[] g) {
 		this.groupby = g;
 		init();
 	}
@@ -1277,14 +1368,21 @@ class Plot {
 		}));
 		
 		def da = [];
-		if (groupby!=null) {
+		if (groupby!=null && groupby.size()>0) {
 			int count=0;
-			groupby.distinctVals().each { val ->
+			SimpleTable st = new SimpleTable();
+			groupby.each { g->
+				 st.add(g);
+			};
+			SortedUniqueTable sut = new SortedUniqueTable(st);
+			0.upto(sut.getRowCount()-1) { ncell ->
 				def points = [];
+				def cells1 = sut.getRow(ncell);
 				DataArray d = new DataArray();
 				//println "groupby="+groupby.getVals();
 				0.upto(cx.length()-1) {
-					if (groupby.getRow(it).val==val) {
+					def cells2 = st.getRow(it);
+					if (!Row.diff(cells1, cells2)) {
 						//println it+" "+x[it]+" "+y[it]+" "+" "+groupby.getRow(it).val+" "+val;
 						points << [x[it], y[it]];
 					}
@@ -1293,8 +1391,10 @@ class Plot {
 				points.each { d.addPoint(it[0], it[1]) };
 				d.setDrawSymbol(true);
 				d.setSymbol(2);
-				d.setColor(gencolor(count++, groupby.cardinality()));
-				d.name=groupby.columnHead.name+"="+val;
+				d.setColor(gencolor(count++, sut.getRowCount()));
+				d.name=cells1.collect { cell ->
+					 cell.column.columnHead.name+"="+cell.val
+				}.join(", "); 
 				d.drawLegend=true;
 				da << d; 
 			};
@@ -1620,7 +1720,7 @@ class VdbenchExplorerGUI {
 	def plots = [];
 	def fixedplots = [];
 	private JTable2 jt2;
-	private Column groupby = null;
+	private Column[] groupby = null;
 	private java.util.Timer redrawRequest = null;
 	private TableStack ts;
 	
@@ -1923,25 +2023,16 @@ $Revision$
 					
 					jt2.model.getColumn(col).groupby=
 							!jt2.model.getColumn(col).groupby;
-					
-					// TODO: Allow more columns for grouping
-					// Remove groupby for other columns
-					0.upto(jt2.model.getColumnCount()-1) {
-						if (it!=col) {
-							jt2.model.getColumn(it).groupby=false;
+
+					def g = [];
+					for (i in 0..(jt2.model.getColumnCount()-1)) {
+						if (jt2.model.getColumn(i).groupby) {
+							g << jt2.model.getColumn(i); 
 						}
 					}
-					
-					if (jt2.model.getColumn(col).groupby) {
-						groupby=jt2.model.getColumn(col);
-						plots.each { plot -> 
-							plot.groupby(groupby);
-						};
-					} else {
-						plots.each { plot -> 
-							groupby=null;
-							plot.groupby(null);
-						}
+					groupby = (Column[])g;			
+					plots.each { plot -> 
+						plot.groupby(groupby);
 					};
 					
 					/* Tried many things to instantly redraw the column 
@@ -2147,6 +2238,17 @@ assert t3.getValueAt(1,2) == "a";
 assert t3.getValueAt(2,2) == "b";
 assert t3.getValueAt(2,2) == "b";
 assert t3.getValueAt(4,2) == "a";
+
+t1 = new SimpleTable();
+t1.add(new SimpleColumn("c1", "c1", (String[])["a","b","a","c","a","c"]));
+t1.add(new SimpleColumn("c2", "c2", (String[])["b","b","b","d","b","d"]));
+t1.add(new SimpleColumn("c3", "c3", (String[])["a","b","a","a","b","a"]));
+t2 = new SortedUniqueTable(t1);
+assert t2.getRowCount() == 4;
+assert t2.getValueAt(0,0) == "a";
+assert t2.getValueAt(0,1) == "b";
+assert t2.getValueAt(0,2) == "a";
+assert t2.getValueAt(1,2) == "b";
 
 t1 = new SimpleTable("Test1", "Test1");
 t1.add(new SimpleColumn("c1", "c1", Type.INT, (String[])["0","1","0","2","0","0"]));
