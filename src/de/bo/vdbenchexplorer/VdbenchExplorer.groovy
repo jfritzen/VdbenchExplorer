@@ -1843,6 +1843,7 @@ class VdbenchExplorerGUI {
 			
 			jt2 = new JTable2(ts.top());
 			
+			// The "Sorter" needs to know the current column order
 			ts.findByName("Sorter").setJTable(jt2);
 			
 			// Registering for right-clicks on the TableHeader
@@ -1882,8 +1883,7 @@ class VdbenchExplorerGUI {
 				};
 			}));
 			
-			swing.panel.size.width=600;
-			swing.panel.size.height=300;
+			frame.setPreferredSize(new Dimension(1024,256));
 			// Resizing is very awkward, this is the best way I could
 			// do it. Took me 3 weeks to figure this out (20091013).
 			def jsp = new JScrollPane(jt2);
