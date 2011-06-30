@@ -1369,7 +1369,6 @@ class Plot {
 		
 		def da = [];
 		if (groupby!=null && groupby.size()>0) {
-			int count=0;
 			SimpleTable st = new SimpleTable();
 			groupby.each { g->
 				 st.add(g);
@@ -1391,12 +1390,22 @@ class Plot {
 				points.each { d.addPoint(it[0], it[1]) };
 				d.setDrawSymbol(true);
 				d.setSymbol(2);
-				d.setColor(gencolor(count++, sut.getRowCount()));
+				d.setColor(gencolor(ncell, sut.getRowCount()));
 				d.name=cells1.collect { cell ->
 					 cell.column.columnHead.name+"="+cell.val
 				}.join(", "); 
 				d.drawLegend=true;
-				da << d; 
+				da << d;
+				
+				// Mark begin of line
+				DataArray ds = new DataArray();
+				ds.addPoint(points[0][0], points[0][1]);
+				ds.setDrawSymbol(true);
+				ds.setSymbol(2);
+				ds.setColor(gencolor(ncell, sut.getRowCount()));
+				ds.setSymbolSize((float)2*ds.getSymbolSize());
+				ds.drawLegend=false;
+				da << ds;
 			};
 		} else {
 			def points = [];
@@ -1410,6 +1419,15 @@ class Plot {
 			d.setSymbol(2);
 			d.drawLegend=false;
 			da << d;
+			
+			// Mark begin of line
+			DataArray ds = new DataArray();
+			ds.addPoint(points[0][0], points[0][1]);
+			ds.setDrawSymbol(true);
+			ds.setSymbol(2);
+			ds.setSymbolSize((float)2*ds.getSymbolSize());
+			ds.drawLegend=false;
+			da << ds;
 		}
 		
 		Vector v = new Vector();
@@ -1864,6 +1882,8 @@ class VdbenchExplorerGUI {
 				};
 			}));
 			
+			swing.panel.size.width=600;
+			swing.panel.size.height=300;
 			// Resizing is very awkward, this is the best way I could
 			// do it. Took me 3 weeks to figure this out (20091013).
 			def jsp = new JScrollPane(jt2);
