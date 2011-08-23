@@ -1,0 +1,5 @@
+int1;int2;float1;float2;string1
+1;2;1.1;1.2;Test
+2;2;2.1;2.2;Test2
+3;2;5.0;5.1;Test3
+4;2;6.0;5.1;Test4

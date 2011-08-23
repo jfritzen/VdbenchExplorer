@@ -23,6 +23,9 @@ import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
+
+import org.w3c.dom.ls.LSException;
+
 import jplot.*;
 
 enum Type { DATETIME, TIME, LABEL, INT, FLOAT };
@@ -255,6 +258,168 @@ class VdbenchFlatfileTable extends Table {
 	String[] boringColumns() {
 		def list = [ "reqrate", "xfersize", "lunsize", "version", "ks_rate", 
 				"ks_resp", "ks_svct", "ks_mb", "ks_read%", "ks_bytes" ];
+		return list;
+	}
+}
+
+/* Matches a File with a header line with columns separated by white space
+ * in the first row and data rows of the same column number in the following
+ * lines 
+ */
+class AsciiFileTable extends Table {
+	def h=[:], heads;
+	def separator_candidates=[" \t", ",", ";"];
+	
+	AsciiFileTable(String file) {
+		super(file, file);
+		String[] ls = new File(file).readLines();
+		//println ls.size();
+		def t=this;
+		def bc = best_candidate(ls);
+		//println bc;
+		heads=ls.first().tokenize(bc).toList();
+		//println heads;
+		heads.each {
+			cols << new SimpleColumn(new ColumnHead(name:it, 
+					description:it));
+		}
+		ls.tail().each {
+			def row=it.tokenize(bc).toList();
+			0.upto(row.size()-1) { col ->
+				cols[col].add(new Cell(cols[col], row[col]));
+			}
+		}
+		cols.each {
+			it.columnType=it.guessType();
+			it.initSymbols();
+		}
+	}
+	
+	// TODO: reinit AsciiFileTable
+	void update() {};
+	
+	String[] boringColumns() {
+		def list = [];
+		return list;
+	}
+	
+	private String best_candidate(list) {
+		// Usually the header gives a hint
+		def r=[:];
+		separator_candidates.each { r[it] = list[0].split(it).size() }
+		return (r.keySet().sort { a, b -> r[b] <=> r[a] })[0];
+	}
+}
+
+/* Parse sar output data. This is a bit awkward, because sar -d outputs
+ * a sub-table for every timestamp (i.e. for every disk a row). The best
+ * way would perhaps be to build a separate disk table and join it with the 
+ * rest of the sar table on the timestamp column. For now, we build one table
+ * with every sar row replicated n times for the n disks.  
+ * */
+class SarOutputTable extends Table {
+	SarOutputTable(String file) {
+		super(file, file);
+		def line;
+		def ls = new File(file).readLines().toList();
+		ls.remove(0);
+		def h1=ls.remove(0);
+		ls.remove(0);
+		
+		// Parse headers
+		def m = ls[0] =~ /^(\d{2,2}:\d{2,2}:\d{2,2})/;
+		ls[0] = m.replaceFirst("");
+		def heads=[];
+		heads[0] = ["time/s"];
+		def count_outputs=1;
+		while(! (ls[0] =~ /^\s*$/)) {
+			line = ls.remove(0);
+			heads[count_outputs++] = line.split().toList();
+		}
+		ls.remove(0);
+		
+		// Parse data
+		def countdevice=null;
+		def rows=0;
+		def data=[]
+		while(ls.size()>0) {
+			m = ls[0] =~ /^((\d{2,2}):(\d{2,2}):(\d{2,2}))/;
+			if (m) {
+				data[rows]=[];
+				data[rows][0] = [((
+					(m[0][2].toInteger()*60)+
+					 m[0][3].toInteger())*60+
+				     m[0][4].toInteger()).toString()];
+				ls[0] = m.replaceFirst("");
+				def count = 1;
+				while (!(ls[0] =~ /^\s*$/)) {
+					def inside_device=false;
+					if (heads[count][0]=="device") {
+						inside_device=true;
+						countdevice=count;
+					}
+					if (!inside_device) {
+						data[rows][count] = ls.remove(0).split().toList().
+							collect { (it =~ /\/.*$/).replaceAll("") }
+					} else if (inside_device) {
+						data[rows][count]=[:];
+						while (ls[0] =~ /^\s*(\S*[a-zA-Z]\S+)\s+/) {
+							def s;
+							s = ls.remove(0).split().toList();
+							data[rows][count][s.head()] = s.tail();
+						}
+						inside_device=false;
+					}
+					count++;
+				}
+				rows++;
+			}
+			ls.remove(0);
+		}
+		
+		// Create columns
+		heads.flatten().each {
+			cols << new SimpleColumn(new ColumnHead(name:it,
+					description:it));
+		}
+		data.each { row ->
+			def rp1, rp2, rp;
+			if (countdevice) {
+				if (countdevice > 1) {
+					rp1=row[0..countdevice-1].flatten();
+				} else { 
+					rp1=[];
+				}
+				if (countdevice < row.size-1) {
+					rp2=row[countdevice+1..-1].flatten();
+				} else {
+					rp2=[];
+				}
+				row[countdevice].each { k,v ->
+					rp=rp1+[k]+v+rp2;
+					(0..(rp.size()-1)).each { col->
+						cols[col].add(new Cell(cols[col], rp[col]));
+						//println cols[col].length()+" "+col+"-> "+rp[col];
+					}
+				}
+			} else {
+				(0..(row.size()-1)).each { col ->
+					cols[col].add(new Cell(cols[col], row[col]));
+				}
+			}
+			
+			cols.each {
+				it.columnType=it.guessType();
+				it.initSymbols();
+			}	
+		}
+	}
+	
+	// TODO: reinit AsciiFileTable
+	void update() {};
+	
+	String[] boringColumns() {
+		def list = [];
 		return list;
 	}
 }
@@ -783,6 +948,10 @@ abstract class Column {
 		}
 		return this;
 	}
+	
+	void print() {
+		println getVals().join(", ");
+	}
 }
 
 class SimpleColumn extends Column {
@@ -843,6 +1012,8 @@ class SimpleColumn extends Column {
 		return (String[]) cells*.val.sort().unique();
 	}
 	
+	// We assign artificial float numbers to labels in order to be able
+	// to plot them
 	void initSymbols() {
 		// We need a toList(), otherwise sort(), unique() strips the list x
 		symbols = cells*.getTypedVal().toList().sort().unique();
@@ -1658,7 +1829,9 @@ class JTable2 extends JTable {
 class SimpleFileFilter extends javax.swing.filechooser.FileFilter {
 	private String classFilter;
 	private static supported_list = [
-	"Vdbench":VdbenchFlatfileTable.class
+	"Vdbench":VdbenchFlatfileTable.class,
+	"ASCII table":AsciiFileTable.class,
+	"SAR output":SarOutputTable.class,
 	];
 	
 	SimpleFileFilter(String cl) {
@@ -1676,6 +1849,10 @@ class SimpleFileFilter extends javax.swing.filechooser.FileFilter {
 			} else {
 				return false;
 			}
+		} else if (supported_list[classFilter] == AsciiFileTable.class) {
+			return true;
+		} else if (supported_list[classFilter] == SarOutputTable.class) {
+			return true;
 		}
 	}
 	
@@ -2199,7 +2376,7 @@ assert Column.guessType((String[])["1.1", "2", "3e-5"]) == Type.FLOAT;
 assert Column.guessType((String[])["1.a", "e2", "1.0eg7"]) == Type.LABEL;
 assert Column.guessType((String[])["09:01:02.123", "23:57:58.987"]) == Type.TIME;
 
-v = new VdbenchFlatfileTable("/Users/jf/BO/masterdata/XXX/flatfile.html");
+v = new VdbenchFlatfileTable("tdata/VdbenchFlatfile.html");
 
 assert v.getColumn(0).columnHead.name == "tod";
 assert v.getColumn(1).columnHead.name == "Run";
@@ -2213,6 +2390,74 @@ assert v.getColumn(5).columnType == Type.FLOAT;
 
 assert v.getColumn(0).cardinality() == v.getColumn(0).length();
 assert v.getColumn(3).cardinality() == 1;
+
+0.upto(v.getColumnCount()-1) {
+	col=v.getColumn(it);
+	assert col.columnType == col.guessType();
+	assert (1..col.length()).contains(col.cardinality()); 
+}
+
+v = new AsciiFileTable("tdata/AsciiFileTable.txt");
+
+assert v.getColumn(0).columnHead.name == "int1";
+assert v.getColumn(1).columnHead.name == "int2";
+assert v.getColumn(3).columnHead.name == "float2";
+assert v.getColumn(4).columnHead.name == "string1";
+
+assert v.getColumn(0).columnType == Type.INT;
+assert v.getColumn(1).columnType == Type.INT;
+assert v.getColumn(3).columnType == Type.FLOAT;
+assert v.getColumn(4).columnType == Type.LABEL;
+
+assert v.getColumn(0).cardinality() == v.getColumn(0).length();
+assert v.getColumn(1).cardinality() == 1;
+
+0.upto(v.getColumnCount()-1) {
+	col=v.getColumn(it);
+	assert col.columnType == col.guessType();
+	assert (1..col.length()).contains(col.cardinality()); 
+}
+
+v = new AsciiFileTable("tdata/AsciiFileTable_Space.txt");
+
+assert v.getColumn(0).columnHead.name == "int1";
+assert v.getColumn(1).columnHead.name == "int2";
+assert v.getColumn(3).columnHead.name == "float2";
+assert v.getColumn(4).columnHead.name == "string1";
+
+assert v.getColumn(0).columnType == Type.INT;
+assert v.getColumn(1).columnType == Type.INT;
+assert v.getColumn(3).columnType == Type.FLOAT;
+assert v.getColumn(4).columnType == Type.LABEL;
+
+assert v.getColumn(0).cardinality() == v.getColumn(0).length();
+assert v.getColumn(1).cardinality() == 1;
+
+0.upto(v.getColumnCount()-1) {
+	col=v.getColumn(it);
+	assert col.columnType == col.guessType();
+	assert (1..col.length()).contains(col.cardinality()); 
+}
+
+v = new SarOutputTable("tdata/sar.data");
+
+assert v.getColumn(0).columnHead.name == "time/s";
+assert v.getColumn(1).columnHead.name == "%usr";
+assert v.getColumn(3).columnHead.name == "%wio";
+assert v.getColumn(5).columnHead.name == "device";
+assert v.getColumn(12).columnHead.name == "runq-sz";
+
+assert v.getColumn(0).columnType == Type.INT;
+assert v.getColumn(1).columnType == Type.INT;
+assert v.getColumn(3).columnType == Type.INT;
+assert v.getColumn(5).columnType == Type.LABEL;
+assert v.getColumn(12).columnType == Type.FLOAT;
+
+assert v.getValueAt(0,5) == "fd0";
+assert v.getValueAt(22,29) == 547;
+
+assert v.getColumn(0).cardinality()*21 == v.getColumn(0).length();
+assert v.getColumn(16).cardinality() == 1;
 
 0.upto(v.getColumnCount()-1) {
 	col=v.getColumn(it);
