@@ -1815,7 +1815,7 @@ class JTable2 extends JTable {
 	private void init() {
 		if (!ready_for_init) { return; }
 		
-		/* Prohibits that all columns are squeezed into on window.
+		/* Prohibits that all columns are squeezed into one window.
 		 * Resizing all columns afterwards is way too awkward, so having
 		 * a scrollbar is much better.
 		 */
@@ -1827,7 +1827,7 @@ class JTable2 extends JTable {
 						this.columnWidth(col);
 				this.columnModel.getColumn(col).headerRenderer=tcr;
 				if (this.model.getColumnClass(col) == java.util.Date) {
-					if (this.model.getColumn(col).guessType() == Type.TIME) {
+					if (this.model.getColumn(col).columnType == Type.TIME) {
 						this.columnModel.getColumn(col).setCellRenderer(dcr);
 					}
 				}
