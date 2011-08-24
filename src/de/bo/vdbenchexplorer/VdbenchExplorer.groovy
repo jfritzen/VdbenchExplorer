@@ -2,13 +2,14 @@ package de.bo.vdbenchexplorer;
 
 import groovy.lang.GroovyShell;
 import groovy.swing.SwingBuilder;
-import java.util.regex.Matcher;
+import java.awt.*;
+import java.awt.event.*;
 import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.regex.Matcher;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.awt.*;
-import java.awt.event.*;
 import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.plaf.UIResource;
@@ -331,7 +332,7 @@ class SarOutputTable extends Table {
 		def m = ls[0] =~ /^(\d{2,2}:\d{2,2}:\d{2,2})/;
 		ls[0] = m.replaceFirst("");
 		def heads=[];
-		heads[0] = ["time/s"];
+		heads[0] = ["tod"];
 		def count_outputs=1;
 		while(! (ls[0] =~ /^\s*$/) && !(ls[0] =~ /^(\d{2,2}:\d{2,2}:\d{2,2})/)) {
 			line = ls.remove(0);
@@ -346,16 +347,13 @@ class SarOutputTable extends Table {
 		def rows=0;
 		def data=[]
 		while(ls.size()>0 && !(ls[0] =~ /^Average/)) {
-			m = ls[0] =~ /^((\d{2,2}):(\d{2,2}):(\d{2,2}))/;
+			m = ls[0] =~ /^(\d{2,2}:\d{2,2}:\d{2,2})/;
 			if (m) {
 				data[rows] = [];
-				data[rows][0] = [((
-					(m[0][2].toInteger()*60)+
-					 m[0][3].toInteger())*60+
-				     m[0][4].toInteger()).toString()];
+				data[rows][0] = [m[0][1]];
 				ls[0] = m.replaceFirst("");
 				def count = 1;
-				while (!(ls[0] =~ /^\s*$/) && !(ls[0] =~ /^((\d{2,2}):(\d{2,2}):(\d{2,2}))/)) {
+				while (!(ls[0] =~ /^\s*$/) && !(ls[0] =~ /^\d{2,2}:\d{2,2}:\d{2,2}/)) {
 					def inside_device=false;
 					if (heads[count][0]=="device") {
 						inside_device=true;
@@ -417,7 +415,8 @@ class SarOutputTable extends Table {
 			cols.each {
 				it.columnType=it.guessType();
 				it.initSymbols();
-			}	
+			}
+			cols[0].columnHead.description="Time/s";
 		}
 	}
 	
@@ -934,6 +933,8 @@ abstract class Column {
 			return Type.FLOAT
 		} else if (l.grep(~/\d{1,2}:\d{2}:\d{2}\.\d{3}/).size()==l.size()) {
 			return Type.TIME;
+		} else if (l.grep(~/\d{1,2}:\d{2}:\d{2}/).size()==l.size()) {
+			return Type.TIME;
 		} else {
 			return Type.LABEL;
 		}
@@ -1418,6 +1419,8 @@ class Cell {
 			case Type.TIME:
 				if (val =~ /\d{1,2}:\d{2}:\d{2}\.\d{3}/) {
 					return Date.parse("HH:mm:ss.SSS", val);
+				} else if (val =~ /\d{1,2}:\d{2}:\d{2}/) {
+					return Date.parse("HH:mm:ss", val);
 				}
 				return (Date)val;
 				break;
@@ -1775,6 +1778,22 @@ implements UIResource {
 	}
 }
 
+public class DateCellRenderer extends DefaultTableCellRenderer{
+	public Component getTableCellRendererComponent(JTable table, Object value, boolean
+	isSelected, boolean hasFocus, int row, int column){
+		super.getTableCellRendererComponent( table, value, isSelected, hasFocus, row, column );
+		if ( value instanceof Date ){
+			// Use SimpleDateFormat class to get a formatted String from Date object.
+			String strDate = new SimpleDateFormat("HH:MM:ss.SSS").format((Date)value);
+			// Sorting algorithm will work with model value. So you dont need to worry
+			// about the renderer's display value.
+			this.setText( strDate );
+		}
+
+		return this;
+	}
+}
+	
 /* End of Renderers
  * 
  */
@@ -1783,10 +1802,12 @@ class JTable2 extends JTable {
 	private int margin = 5;
 	private boolean ready_for_init=false;
 	private CustomHeaderRenderer tcr;
+	private DateCellRenderer dcr;
 	
 	JTable2(TableModel tm) {
 		super(tm);
 		tcr = new CustomHeaderRenderer();
+		dcr = new DateCellRenderer();
 		ready_for_init=true;
 		init();
 	}
@@ -1794,6 +1815,10 @@ class JTable2 extends JTable {
 	private void init() {
 		if (!ready_for_init) { return; }
 		
+		/* Prohibits that all columns are squeezed into on window.
+		 * Resizing all columns afterwards is way too awkward, so having
+		 * a scrollbar is much better.
+		 */
 		this.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 		
 		0.upto(this.model.columnCount-1) { col ->
@@ -1801,6 +1826,11 @@ class JTable2 extends JTable {
 				this.columnModel.getColumn(col).preferredWidth=
 						this.columnWidth(col);
 				this.columnModel.getColumn(col).headerRenderer=tcr;
+				if (this.model.getColumnClass(col) == java.util.Date) {
+					if (this.model.getColumn(col).guessType() == Type.TIME) {
+						this.columnModel.getColumn(col).setCellRenderer(dcr);
+					}
+				}
 			}
 		}
 	}
@@ -1835,9 +1865,9 @@ class JTable2 extends JTable {
 class SimpleFileFilter extends javax.swing.filechooser.FileFilter {
 	private String classFilter;
 	private static supported_list = [
-	"Vdbench":VdbenchFlatfileTable.class,
 	"ASCII table":AsciiFileTable.class,
 	"SAR output":SarOutputTable.class,
+	"Vdbench flatfile":VdbenchFlatfileTable.class,
 	];
 	
 	SimpleFileFilter(String cl) {
@@ -2380,6 +2410,7 @@ $Revision$
 assert Column.guessType((String[])["1", "2", "3"]) == Type.INT;
 assert Column.guessType((String[])["1.1", "2", "3e-5"]) == Type.FLOAT;
 assert Column.guessType((String[])["1.a", "e2", "1.0eg7"]) == Type.LABEL;
+assert Column.guessType((String[])["09:01:02", "23:57:58"]) == Type.TIME;
 assert Column.guessType((String[])["09:01:02.123", "23:57:58.987"]) == Type.TIME;
 
 v = new VdbenchFlatfileTable("tdata/VdbenchFlatfile.html");
@@ -2447,13 +2478,13 @@ assert v.getColumn(1).cardinality() == 1;
 
 v = new SarOutputTable("tdata/sar_multiline.data");
 
-assert v.getColumn(0).columnHead.name == "time/s";
+assert v.getColumn(0).columnHead.name == "tod";
 assert v.getColumn(1).columnHead.name == "%usr";
 assert v.getColumn(3).columnHead.name == "%wio";
 assert v.getColumn(5).columnHead.name == "device";
 assert v.getColumn(12).columnHead.name == "runq-sz";
 
-assert v.getColumn(0).columnType == Type.INT;
+assert v.getColumn(0).columnType == Type.TIME;
 assert v.getColumn(1).columnType == Type.INT;
 assert v.getColumn(3).columnType == Type.INT;
 assert v.getColumn(5).columnType == Type.LABEL;
@@ -2473,11 +2504,11 @@ assert v.getColumn(16).cardinality() == 1;
 
 v = new SarOutputTable("tdata/sar_simple.data");
 
-assert v.getColumn(0).columnHead.name == "time/s";
+assert v.getColumn(0).columnHead.name == "tod";
 assert v.getColumn(1).columnHead.name == "scall/s";
 assert v.getColumn(4).columnHead.name == "fork/s";
 
-assert v.getColumn(0).columnType == Type.INT;
+assert v.getColumn(0).columnType == Type.TIME;
 assert v.getColumn(1).columnType == Type.INT;
 assert v.getColumn(4).columnType == Type.FLOAT;
 
