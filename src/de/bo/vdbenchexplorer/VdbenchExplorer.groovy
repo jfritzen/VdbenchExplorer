@@ -315,7 +315,8 @@ class AsciiFileTable extends Table {
  * a sub-table for every timestamp (i.e. for every disk a row). The best
  * way would perhaps be to build a separate disk table and join it with the 
  * rest of the sar table on the timestamp column. For now, we build one table
- * with every sar row replicated n times for the n disks.  
+ * with every sar row replicated n times for the n disks.
+ * The whole code is a terrible hack, I'm sorry.
  * */
 class SarOutputTable extends Table {
 	SarOutputTable(String file) {
@@ -332,27 +333,29 @@ class SarOutputTable extends Table {
 		def heads=[];
 		heads[0] = ["time/s"];
 		def count_outputs=1;
-		while(! (ls[0] =~ /^\s*$/)) {
+		while(! (ls[0] =~ /^\s*$/) && !(ls[0] =~ /^(\d{2,2}:\d{2,2}:\d{2,2})/)) {
 			line = ls.remove(0);
 			heads[count_outputs++] = line.split().toList();
 		}
-		ls.remove(0);
+		while (ls[0] =~ /^\s*$/) {
+			ls.remove(0);
+		}
 		
 		// Parse data
 		def countdevice=null;
 		def rows=0;
 		def data=[]
-		while(ls.size()>0) {
+		while(ls.size()>0 && !(ls[0] =~ /^Average/)) {
 			m = ls[0] =~ /^((\d{2,2}):(\d{2,2}):(\d{2,2}))/;
 			if (m) {
-				data[rows]=[];
+				data[rows] = [];
 				data[rows][0] = [((
 					(m[0][2].toInteger()*60)+
 					 m[0][3].toInteger())*60+
 				     m[0][4].toInteger()).toString()];
 				ls[0] = m.replaceFirst("");
 				def count = 1;
-				while (!(ls[0] =~ /^\s*$/)) {
+				while (!(ls[0] =~ /^\s*$/) && !(ls[0] =~ /^((\d{2,2}):(\d{2,2}):(\d{2,2}))/)) {
 					def inside_device=false;
 					if (heads[count][0]=="device") {
 						inside_device=true;
@@ -361,7 +364,7 @@ class SarOutputTable extends Table {
 					if (!inside_device) {
 						data[rows][count] = ls.remove(0).split().toList().
 							collect { (it =~ /\/.*$/).replaceAll("") }
-					} else if (inside_device) {
+					} else {
 						data[rows][count]=[:];
 						while (ls[0] =~ /^\s*(\S*[a-zA-Z]\S+)\s+/) {
 							def s;
@@ -373,8 +376,10 @@ class SarOutputTable extends Table {
 					count++;
 				}
 				rows++;
+			}				
+			while (ls[0] =~ /^\s*$/) {
+				ls.remove(0);
 			}
-			ls.remove(0);
 		}
 		
 		// Create columns
@@ -403,8 +408,9 @@ class SarOutputTable extends Table {
 					}
 				}
 			} else {
-				(0..(row.size()-1)).each { col ->
-					cols[col].add(new Cell(cols[col], row[col]));
+				rp = row.flatten();
+				(0..(rp.size()-1)).each { col ->
+					cols[col].add(new Cell(cols[col], rp[col]));
 				}
 			}
 			
@@ -2439,7 +2445,7 @@ assert v.getColumn(1).cardinality() == 1;
 	assert (1..col.length()).contains(col.cardinality()); 
 }
 
-v = new SarOutputTable("tdata/sar.data");
+v = new SarOutputTable("tdata/sar_multiline.data");
 
 assert v.getColumn(0).columnHead.name == "time/s";
 assert v.getColumn(1).columnHead.name == "%usr";
@@ -2458,6 +2464,28 @@ assert v.getValueAt(22,29) == 547;
 
 assert v.getColumn(0).cardinality()*21 == v.getColumn(0).length();
 assert v.getColumn(16).cardinality() == 1;
+
+0.upto(v.getColumnCount()-1) {
+	col=v.getColumn(it);
+	assert col.columnType == col.guessType();
+	assert (1..col.length()).contains(col.cardinality()); 
+}
+
+v = new SarOutputTable("tdata/sar_simple.data");
+
+assert v.getColumn(0).columnHead.name == "time/s";
+assert v.getColumn(1).columnHead.name == "scall/s";
+assert v.getColumn(4).columnHead.name == "fork/s";
+
+assert v.getColumn(0).columnType == Type.INT;
+assert v.getColumn(1).columnType == Type.INT;
+assert v.getColumn(4).columnType == Type.FLOAT;
+
+assert v.getValueAt(0,1) == 2792;
+assert v.getValueAt(1,4) == 1.95;
+
+assert v.getColumn(0).length() == 10;
+assert v.getColumn(0).cardinality() == v.getColumn(0).length();
 
 0.upto(v.getColumnCount()-1) {
 	col=v.getColumn(it);
