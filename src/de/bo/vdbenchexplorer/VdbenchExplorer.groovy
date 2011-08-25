@@ -568,6 +568,7 @@ class RowFilteredTable extends Table {
 	JTable jt=null;
 	RowMap rm;
 	def closures=[];
+	def descriptions=[:];
 	def filters=[:];
 	
 	RowFilteredTable(Table t) {
@@ -615,6 +616,7 @@ class RowFilteredTable extends Table {
 			return ret;
 		};
 		closures << c;
+		descriptions[c] = cname.substring(0,2)+(inverse?"=":"!=")+vals.join(",");
 		filters[cname] << c;
 		getColumnByName(cname).filtered = true;
 		return;
@@ -629,6 +631,7 @@ class RowFilteredTable extends Table {
 			return ret;
 		};
 		closures << c
+		descriptions[c] = cname.substring(0,2)+(inverse?"=":"!=")+val;
 		filters[cname] << c;
 		getColumnByName(cname).filtered = true;
 		return;
@@ -636,13 +639,14 @@ class RowFilteredTable extends Table {
 	
 	void removeAllFilters() {
 		closures = [];
+		descriptions = [:];
 		cols.each { it.filter = [] };
 		filters = [:];
 		cols.each { it.filtered = false }
 	}
 	
 	void removeColFilters(String name) {
-		filters[name].each { closures.remove(it) };
+		filters[name].each { closures.remove(it); descriptions.remove(it); };
 		filters[name] = [];
 		getColumnByName(name).filtered=false;
 	}
@@ -681,6 +685,14 @@ class RowFilteredTable extends Table {
 	
 	int length() {
 		return rm.virt2real.size();
+	}
+	
+	String currentFilterDescription() {
+		if (descriptions.size()) {
+			descriptions.values().join(" ");
+		} else {
+			"";
+		}
 	}
 }
 
@@ -1448,6 +1460,7 @@ class Plot {
 	Graph_2D graph;
 	GraphSettings gs;
 	Dimension box;
+	private TableStack ts = null;
 	
 	private final def swing;
 	private final def saveDialog;
@@ -1465,15 +1478,16 @@ class Plot {
 				fileSelectionMode: JFileChooser.FILES_ONLY) {};  		
 	}	
 	
-	Plot(Column c1, Column c2) {
-		this(c1, c2, null);
+	Plot(Column c1, Column c2, TableStack ts) {
+		this(c1, c2, ts, null);
 	}	
 	
-	Plot(Column c1, Column c2, Column[] g) {
+	Plot(Column c1, Column c2, TableStack ts, Column[] g) {
 		this();
 		assert c1.length() == c2.length();
 		this.cx = c1;
 		this.cy = c2;
+		this.ts = ts;
 		this.groupby = g;
 		init();
 	}	
@@ -1630,11 +1644,13 @@ class Plot {
 		}	
 		graph = new Graph_2D(gs);
 		graph.show(v);
+		def filterDescription = ts.findByName("RowFilter").currentFilterDescription();
+		
 		popup = swing.popupMenu(id:"popupplot") {
 			menuItem() {
 				action(name:"Save as PNG", closure: {
 					def pic = graph.getBufferedImage(p.getSize());
-					saveDialog.setSelectedFile(new File(plotFrame.title+".png"));		
+					saveDialog.setSelectedFile(new File(plotFrame.title+" "+filterDescription+".png"));		
 					if (saveDialog.showSaveDialog() != JFileChooser.APPROVE_OPTION) { 
 						return;
 					}			
@@ -2419,7 +2435,7 @@ $Revision$
 				} else {
 					//println "create new";
 					//println "adding "+xcol+" "+ycol;
-					plots << new Plot(xcol, ycol, groupby);
+					plots << new Plot(xcol, ycol, ts, groupby);
 				}
 			}
 		}
