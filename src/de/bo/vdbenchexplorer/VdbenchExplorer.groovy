@@ -10,6 +10,7 @@ import java.util.regex.Matcher;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.plaf.UIResource;
@@ -1448,11 +1449,20 @@ class Plot {
 	GraphSettings gs;
 	Dimension box;
 	
+	private final def swing;
+	private final def saveDialog;
+	private def popup;
+	
 	Plot() {
 		plotFrame = new JFrame();
 		p = new JPanel(new BorderLayout());
 		plotFrame.getContentPane().add(p);
 		gs = new GraphSettings();
+		swing = new SwingBuilder();
+		saveDialog  = swing.fileChooser(
+				dialogTitle:"Save PNG", 
+				id:"saveDialog", acceptAllFileFilterUsed:true,
+				fileSelectionMode: JFileChooser.FILES_ONLY) {};  		
 	}	
 	
 	Plot(Column c1, Column c2) {
@@ -1620,7 +1630,23 @@ class Plot {
 		}	
 		graph = new Graph_2D(gs);
 		graph.show(v);
-		
+		popup = swing.popupMenu(id:"popupplot") {
+			menuItem() {
+				action(name:"Save as PNG", closure: {
+					def pic = graph.getBufferedImage(p.getSize());
+					saveDialog.setSelectedFile(new File(plotFrame.title+".png"));		
+					if (saveDialog.showSaveDialog() != JFileChooser.APPROVE_OPTION) { 
+						return;
+					}			
+					ImageIO.write(pic, "png", new File(saveDialog.selectedFile.path));
+				})
+			}
+		};	
+
+		graph.addMouseListener(new PopupListener({
+			popup.show(it.getComponent(), it.getX(), it.getY());
+		}));
+
 		p.setPreferredSize(box);
 		p.add(graph,BorderLayout.CENTER);
 		plotFrame.pack();
