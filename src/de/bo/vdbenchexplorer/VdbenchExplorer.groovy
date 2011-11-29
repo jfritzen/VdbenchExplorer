@@ -616,7 +616,7 @@ class RowFilteredTable extends Table {
 			return ret;
 		};
 		closures << c;
-		descriptions[c] = cname.substring(0,2)+(inverse?"=":"!=")+vals.join(",");
+		descriptions[c] = cname.substring(0,Math.min(3,cname.size()))+(inverse?"=":"!=")+vals.join(",");
 		filters[cname] << c;
 		getColumnByName(cname).filtered = true;
 		return;
@@ -631,7 +631,7 @@ class RowFilteredTable extends Table {
 			return ret;
 		};
 		closures << c
-		descriptions[c] = cname.substring(0,2)+(inverse?"=":"!=")+val;
+		descriptions[c] = cname.substring(0,Math.min(3,cname.size()))+(inverse?"=":"!=")+val;
 		filters[cname] << c;
 		getColumnByName(cname).filtered = true;
 		return;
@@ -1650,7 +1650,9 @@ class Plot {
 			menuItem() {
 				action(name:"Save as PNG", closure: {
 					def pic = graph.getBufferedImage(p.getSize());
-					saveDialog.setSelectedFile(new File(plotFrame.title+" "+filterDescription+".png"));		
+					def file = plotFrame.title+" "+filterDescription;
+					def f = (file =~ /\//).replaceAll("_");
+					saveDialog.setSelectedFile(new File(f+".png"));		
 					if (saveDialog.showSaveDialog() != JFileChooser.APPROVE_OPTION) { 
 						return;
 					}			
