@@ -2022,6 +2022,11 @@ class VdbenchExplorerGUI {
 				dialogTitle:"Choose a table file", 
 				id:"openDialog", acceptAllFileFilterUsed:false,
 				fileSelectionMode: JFileChooser.FILES_ONLY) {};                
+		SimpleFileFilter.supported().each { 
+			openDialog.addChoosableFileFilter(
+				new SimpleFileFilter(it));
+		}
+			
 		exit = swing.action(name:'Exit', closure:{System.exit(0)});
 		addf = swing.action(name:'Add Table', closure:{
 			if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
@@ -2079,11 +2084,6 @@ class VdbenchExplorerGUI {
 			}
 		});
 		open = swing.action(name:'Open', closure:{			
-			SimpleFileFilter.supported().each { 
-				openDialog.addChoosableFileFilter(
-						new SimpleFileFilter(it));
-			}
-			
 			if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
 				return;
 			
@@ -2451,222 +2451,225 @@ $Revision$
 	}
 }
 
-assert Column.guessType((String[])["1", "2", "3"]) == Type.INT;
-assert Column.guessType((String[])["1.1", "2", "3e-5"]) == Type.FLOAT;
-assert Column.guessType((String[])["1.a", "e2", "1.0eg7"]) == Type.LABEL;
-assert Column.guessType((String[])["09:01:02", "23:57:58"]) == Type.TIME;
-assert Column.guessType((String[])["09:01:02.123", "23:57:58.987"]) == Type.TIME;
+if (new File("tdata").exists()) {
 
-v = new VdbenchFlatfileTable("tdata/VdbenchFlatfile.html");
-
-assert v.getColumn(0).columnHead.name == "tod";
-assert v.getColumn(1).columnHead.name == "Run";
-assert v.getColumn(3).columnHead.name == "reqrate";
-assert v.getColumn(5).columnHead.name == "MB/sec";
-
-assert v.getColumn(0).columnType == Type.TIME;
-assert v.getColumn(1).columnType == Type.LABEL;
-assert v.getColumn(3).columnType == Type.FLOAT;
-assert v.getColumn(5).columnType == Type.FLOAT;
-
-assert v.getColumn(0).cardinality() == v.getColumn(0).length();
-assert v.getColumn(3).cardinality() == 1;
-
-0.upto(v.getColumnCount()-1) {
-	col=v.getColumn(it);
-	assert col.columnType == col.guessType();
-	assert (1..col.length()).contains(col.cardinality()); 
+	assert Column.guessType((String[])["1", "2", "3"]) == Type.INT;
+	assert Column.guessType((String[])["1.1", "2", "3e-5"]) == Type.FLOAT;
+	assert Column.guessType((String[])["1.a", "e2", "1.0eg7"]) == Type.LABEL;
+	assert Column.guessType((String[])["09:01:02", "23:57:58"]) == Type.TIME;
+	assert Column.guessType((String[])["09:01:02.123", "23:57:58.987"]) == Type.TIME;
+	
+	v = new VdbenchFlatfileTable("tdata/VdbenchFlatfile.html");
+	
+	assert v.getColumn(0).columnHead.name == "tod";
+	assert v.getColumn(1).columnHead.name == "Run";
+	assert v.getColumn(3).columnHead.name == "reqrate";
+	assert v.getColumn(5).columnHead.name == "MB/sec";
+	
+	assert v.getColumn(0).columnType == Type.TIME;
+	assert v.getColumn(1).columnType == Type.LABEL;
+	assert v.getColumn(3).columnType == Type.FLOAT;
+	assert v.getColumn(5).columnType == Type.FLOAT;
+	
+	assert v.getColumn(0).cardinality() == v.getColumn(0).length();
+	assert v.getColumn(3).cardinality() == 1;
+	
+	0.upto(v.getColumnCount()-1) {
+		col=v.getColumn(it);
+		assert col.columnType == col.guessType();
+		assert (1..col.length()).contains(col.cardinality()); 
+	}
+	
+	v = new AsciiFileTable("tdata/AsciiFileTable.txt");
+	
+	assert v.getColumn(0).columnHead.name == "int1";
+	assert v.getColumn(1).columnHead.name == "int2";
+	assert v.getColumn(3).columnHead.name == "float2";
+	assert v.getColumn(4).columnHead.name == "string1";
+	
+	assert v.getColumn(0).columnType == Type.INT;
+	assert v.getColumn(1).columnType == Type.INT;
+	assert v.getColumn(3).columnType == Type.FLOAT;
+	assert v.getColumn(4).columnType == Type.LABEL;
+	
+	assert v.getColumn(0).cardinality() == v.getColumn(0).length();
+	assert v.getColumn(1).cardinality() == 1;
+	
+	0.upto(v.getColumnCount()-1) {
+		col=v.getColumn(it);
+		assert col.columnType == col.guessType();
+		assert (1..col.length()).contains(col.cardinality()); 
+	}
+	
+	v = new AsciiFileTable("tdata/AsciiFileTable_Space.txt");
+	
+	assert v.getColumn(0).columnHead.name == "int1";
+	assert v.getColumn(1).columnHead.name == "int2";
+	assert v.getColumn(3).columnHead.name == "float2";
+	assert v.getColumn(4).columnHead.name == "string1";
+	
+	assert v.getColumn(0).columnType == Type.INT;
+	assert v.getColumn(1).columnType == Type.INT;
+	assert v.getColumn(3).columnType == Type.FLOAT;
+	assert v.getColumn(4).columnType == Type.LABEL;
+	
+	assert v.getColumn(0).cardinality() == v.getColumn(0).length();
+	assert v.getColumn(1).cardinality() == 1;
+	
+	0.upto(v.getColumnCount()-1) {
+		col=v.getColumn(it);
+		assert col.columnType == col.guessType();
+		assert (1..col.length()).contains(col.cardinality()); 
+	}
+	
+	v = new SarOutputTable("tdata/sar_multiline.data");
+	
+	assert v.getColumn(0).columnHead.name == "tod";
+	assert v.getColumn(1).columnHead.name == "%usr";
+	assert v.getColumn(3).columnHead.name == "%wio";
+	assert v.getColumn(5).columnHead.name == "device";
+	assert v.getColumn(12).columnHead.name == "runq-sz";
+	
+	assert v.getColumn(0).columnType == Type.TIME;
+	assert v.getColumn(1).columnType == Type.INT;
+	assert v.getColumn(3).columnType == Type.INT;
+	assert v.getColumn(5).columnType == Type.LABEL;
+	assert v.getColumn(12).columnType == Type.FLOAT;
+	
+	assert v.getValueAt(0,5) == "fd0";
+	assert v.getValueAt(22,29) == 547;
+	
+	assert v.getColumn(0).cardinality()*21 == v.getColumn(0).length();
+	assert v.getColumn(16).cardinality() == 1;
+	
+	0.upto(v.getColumnCount()-1) {
+		col=v.getColumn(it);
+		assert col.columnType == col.guessType();
+		assert (1..col.length()).contains(col.cardinality()); 
+	}
+	
+	v = new SarOutputTable("tdata/sar_simple.data");
+	
+	assert v.getColumn(0).columnHead.name == "tod";
+	assert v.getColumn(1).columnHead.name == "scall/s";
+	assert v.getColumn(4).columnHead.name == "fork/s";
+	
+	assert v.getColumn(0).columnType == Type.TIME;
+	assert v.getColumn(1).columnType == Type.INT;
+	assert v.getColumn(4).columnType == Type.FLOAT;
+	
+	assert v.getValueAt(0,1) == 2792;
+	assert v.getValueAt(1,4) == 1.95;
+	
+	assert v.getColumn(0).length() == 10;
+	assert v.getColumn(0).cardinality() == v.getColumn(0).length();
+	
+	0.upto(v.getColumnCount()-1) {
+		col=v.getColumn(it);
+		assert col.columnType == col.guessType();
+		assert (1..col.length()).contains(col.cardinality()); 
+	}
+	
+	t1 = new SimpleTable();
+	t1.add(new SimpleColumn("c1", "c1", (String[])["a","b","a","c","a","a"]));
+	t1.add(new SimpleColumn("c2", "c2", (String[])["b","b","a","d","b","d"]));
+	t1.add(new SimpleColumn("c3", "c3", (String[])["a","b","c","a","b","d"]));
+	t2 = new SortedTable(t1);
+	t2.sort();
+	assert t2.getValueAt(0,0) == "a";
+	assert t2.getValueAt(1,0) == "a";
+	assert t2.getValueAt(4,0) == "b";
+	assert t2.getValueAt(5,0) == "c";
+	assert t2.getValueAt(0,1) == "a";
+	assert t2.getValueAt(1,1) == "b";
+	assert t2.getValueAt(2,1) == "b";
+	assert t2.getValueAt(4,1) == "b";
+	assert t2.getValueAt(0,2) == "c";
+	assert t2.getValueAt(1,2) == "a";
+	assert t2.getValueAt(2,2) == "b";
+	assert t2.getValueAt(2,2) == "b";
+	assert t2.getValueAt(4,2) == "b";
+	t3 = new RowFilteredTable(t2);
+	t3.addFilter(t1.getColumn(0).columnHead.name, "b", false);
+	t3.applyFilters();
+	assert t3.length()==5;
+	0.upto(t3.length()-1) {
+		assert t3.getValueAt(it, 0) != "b";
+	}
+	assert t3.getValueAt(0,0) == "a";
+	assert t3.getValueAt(1,0) == "a";
+	assert t3.getValueAt(4,0) == "c";
+	assert t3.getValueAt(0,1) == "a";
+	assert t3.getValueAt(1,1) == "b";
+	assert t3.getValueAt(2,1) == "b";
+	assert t3.getValueAt(4,1) == "d";
+	assert t3.getValueAt(0,2) == "c";
+	assert t3.getValueAt(1,2) == "a";
+	assert t3.getValueAt(2,2) == "b";
+	assert t3.getValueAt(2,2) == "b";
+	assert t3.getValueAt(4,2) == "a";
+	
+	t1 = new SimpleTable();
+	t1.add(new SimpleColumn("c1", "c1", (String[])["a","b","a","c","a","c"]));
+	t1.add(new SimpleColumn("c2", "c2", (String[])["b","b","b","d","b","d"]));
+	t1.add(new SimpleColumn("c3", "c3", (String[])["a","b","a","a","b","a"]));
+	t2 = new SortedUniqueTable(t1);
+	assert t2.getRowCount() == 4;
+	assert t2.getValueAt(0,0) == "a";
+	assert t2.getValueAt(0,1) == "b";
+	assert t2.getValueAt(0,2) == "a";
+	assert t2.getValueAt(1,2) == "b";
+	
+	t1 = new SimpleTable("Test1", "Test1");
+	t1.add(new SimpleColumn("c1", "c1", Type.INT, (String[])["0","1","0","2","0","0"]));
+	t1.add(new SimpleColumn("c2", "c2", Type.INT, (String[])["1","1","0","3","1","3"]));
+	t1.add(new SimpleColumn("c3", "c3", Type.INT, (String[])["0","1","2","0","1","3"]));
+	ts = new TableStack();
+	ts.add(t1);
+	ts.add(ColumnFilteredTable.class);
+	t2=ts.findByClass(ColumnFilteredTable.class);
+	t2.addSyntheticColumn("'c1'+'c2'");
+	t2.addSyntheticColumn("'c2'*'c3'");
+	assert t2.getValueAt(3,0) == 2;
+	assert t2.getValueAt(4,1) == 1; 
+	assert t2.getValueAt(0,3) == 1;
+	assert t2.getValueAt(1,3) == 2;
+	assert t2.getValueAt(3,3) == 5;
+	assert t2.getValueAt(0,4) == 0;
+	assert t2.getValueAt(1,4) == 1;
+	assert t2.getValueAt(5,4) == 9;
+	
+	assert MergedTable.makeShortNames(["Test"]) == ["Test":"Test"];
+	assert MergedTable.makeShortNames(["Test1","Test2"]) == ["Test1":"1", "Test2":"2"];
+	assert MergedTable.makeShortNames(["1Test","2Test"]) == ["1Test":"1", "2Test":"2"];
+	assert MergedTable.makeShortNames(["Waelzer","Walzer"]) == ["Waelzer":"e", "Walzer":""];
+	assert MergedTable.makeShortNames(["Waelzer","Walzer","Wasser"]) == ["Waelzer":"elz", "Walzer":"lz", "Wasser":"ss"];
+	assert MergedTable.makeShortNames(["abcde","xyz"]) == ["abcde":"abcde", "xyz":"xyz"];
+	
+	t2=new SimpleTable("Test2", "Test2");
+	t2.add(new SimpleColumn("c1", "c1", Type.INT, (String[])["0","7"]));
+	t2.add(new SimpleColumn("c2", "c2", Type.INT, (String[])["6","1"]));
+	ts=new TableStack();
+	ts.add(t1);
+	ts.add(MergedTable.class, "Merge");
+	t3=ts.findByName("Merge");
+	assert t3.rowCount == 6;
+	assert t3.getValueAt(1,0) == 1;
+	assert t3.getValueAt(3,0) == 2;
+	assert t3.getValueAt(3,1) == 3;
+	t3.add(t2);
+	assert t3.rowCount == 8;
+	assert t3.getColumnByName("c1").length() == 8;
+	assert t3.getValueAt(0,0) == '"1"';
+	assert t3.getValueAt(5,0) == '"1"';
+	assert t3.getValueAt(6,0) == '"2"';
+	assert t3.getValueAt(7,0) == '"2"';
+	assert t3.getValueAt(1,1) == 1;
+	assert t3.getValueAt(3,1) == 2;
+	assert t3.getValueAt(7,1) == 7;
+	assert t3.getValueAt(3,2) == 3;
+	assert t3.getValueAt(6,2) == 6;
 }
-
-v = new AsciiFileTable("tdata/AsciiFileTable.txt");
-
-assert v.getColumn(0).columnHead.name == "int1";
-assert v.getColumn(1).columnHead.name == "int2";
-assert v.getColumn(3).columnHead.name == "float2";
-assert v.getColumn(4).columnHead.name == "string1";
-
-assert v.getColumn(0).columnType == Type.INT;
-assert v.getColumn(1).columnType == Type.INT;
-assert v.getColumn(3).columnType == Type.FLOAT;
-assert v.getColumn(4).columnType == Type.LABEL;
-
-assert v.getColumn(0).cardinality() == v.getColumn(0).length();
-assert v.getColumn(1).cardinality() == 1;
-
-0.upto(v.getColumnCount()-1) {
-	col=v.getColumn(it);
-	assert col.columnType == col.guessType();
-	assert (1..col.length()).contains(col.cardinality()); 
-}
-
-v = new AsciiFileTable("tdata/AsciiFileTable_Space.txt");
-
-assert v.getColumn(0).columnHead.name == "int1";
-assert v.getColumn(1).columnHead.name == "int2";
-assert v.getColumn(3).columnHead.name == "float2";
-assert v.getColumn(4).columnHead.name == "string1";
-
-assert v.getColumn(0).columnType == Type.INT;
-assert v.getColumn(1).columnType == Type.INT;
-assert v.getColumn(3).columnType == Type.FLOAT;
-assert v.getColumn(4).columnType == Type.LABEL;
-
-assert v.getColumn(0).cardinality() == v.getColumn(0).length();
-assert v.getColumn(1).cardinality() == 1;
-
-0.upto(v.getColumnCount()-1) {
-	col=v.getColumn(it);
-	assert col.columnType == col.guessType();
-	assert (1..col.length()).contains(col.cardinality()); 
-}
-
-v = new SarOutputTable("tdata/sar_multiline.data");
-
-assert v.getColumn(0).columnHead.name == "tod";
-assert v.getColumn(1).columnHead.name == "%usr";
-assert v.getColumn(3).columnHead.name == "%wio";
-assert v.getColumn(5).columnHead.name == "device";
-assert v.getColumn(12).columnHead.name == "runq-sz";
-
-assert v.getColumn(0).columnType == Type.TIME;
-assert v.getColumn(1).columnType == Type.INT;
-assert v.getColumn(3).columnType == Type.INT;
-assert v.getColumn(5).columnType == Type.LABEL;
-assert v.getColumn(12).columnType == Type.FLOAT;
-
-assert v.getValueAt(0,5) == "fd0";
-assert v.getValueAt(22,29) == 547;
-
-assert v.getColumn(0).cardinality()*21 == v.getColumn(0).length();
-assert v.getColumn(16).cardinality() == 1;
-
-0.upto(v.getColumnCount()-1) {
-	col=v.getColumn(it);
-	assert col.columnType == col.guessType();
-	assert (1..col.length()).contains(col.cardinality()); 
-}
-
-v = new SarOutputTable("tdata/sar_simple.data");
-
-assert v.getColumn(0).columnHead.name == "tod";
-assert v.getColumn(1).columnHead.name == "scall/s";
-assert v.getColumn(4).columnHead.name == "fork/s";
-
-assert v.getColumn(0).columnType == Type.TIME;
-assert v.getColumn(1).columnType == Type.INT;
-assert v.getColumn(4).columnType == Type.FLOAT;
-
-assert v.getValueAt(0,1) == 2792;
-assert v.getValueAt(1,4) == 1.95;
-
-assert v.getColumn(0).length() == 10;
-assert v.getColumn(0).cardinality() == v.getColumn(0).length();
-
-0.upto(v.getColumnCount()-1) {
-	col=v.getColumn(it);
-	assert col.columnType == col.guessType();
-	assert (1..col.length()).contains(col.cardinality()); 
-}
-
-t1 = new SimpleTable();
-t1.add(new SimpleColumn("c1", "c1", (String[])["a","b","a","c","a","a"]));
-t1.add(new SimpleColumn("c2", "c2", (String[])["b","b","a","d","b","d"]));
-t1.add(new SimpleColumn("c3", "c3", (String[])["a","b","c","a","b","d"]));
-t2 = new SortedTable(t1);
-t2.sort();
-assert t2.getValueAt(0,0) == "a";
-assert t2.getValueAt(1,0) == "a";
-assert t2.getValueAt(4,0) == "b";
-assert t2.getValueAt(5,0) == "c";
-assert t2.getValueAt(0,1) == "a";
-assert t2.getValueAt(1,1) == "b";
-assert t2.getValueAt(2,1) == "b";
-assert t2.getValueAt(4,1) == "b";
-assert t2.getValueAt(0,2) == "c";
-assert t2.getValueAt(1,2) == "a";
-assert t2.getValueAt(2,2) == "b";
-assert t2.getValueAt(2,2) == "b";
-assert t2.getValueAt(4,2) == "b";
-t3 = new RowFilteredTable(t2);
-t3.addFilter(t1.getColumn(0).columnHead.name, "b", false);
-t3.applyFilters();
-assert t3.length()==5;
-0.upto(t3.length()-1) {
-	assert t3.getValueAt(it, 0) != "b";
-}
-assert t3.getValueAt(0,0) == "a";
-assert t3.getValueAt(1,0) == "a";
-assert t3.getValueAt(4,0) == "c";
-assert t3.getValueAt(0,1) == "a";
-assert t3.getValueAt(1,1) == "b";
-assert t3.getValueAt(2,1) == "b";
-assert t3.getValueAt(4,1) == "d";
-assert t3.getValueAt(0,2) == "c";
-assert t3.getValueAt(1,2) == "a";
-assert t3.getValueAt(2,2) == "b";
-assert t3.getValueAt(2,2) == "b";
-assert t3.getValueAt(4,2) == "a";
-
-t1 = new SimpleTable();
-t1.add(new SimpleColumn("c1", "c1", (String[])["a","b","a","c","a","c"]));
-t1.add(new SimpleColumn("c2", "c2", (String[])["b","b","b","d","b","d"]));
-t1.add(new SimpleColumn("c3", "c3", (String[])["a","b","a","a","b","a"]));
-t2 = new SortedUniqueTable(t1);
-assert t2.getRowCount() == 4;
-assert t2.getValueAt(0,0) == "a";
-assert t2.getValueAt(0,1) == "b";
-assert t2.getValueAt(0,2) == "a";
-assert t2.getValueAt(1,2) == "b";
-
-t1 = new SimpleTable("Test1", "Test1");
-t1.add(new SimpleColumn("c1", "c1", Type.INT, (String[])["0","1","0","2","0","0"]));
-t1.add(new SimpleColumn("c2", "c2", Type.INT, (String[])["1","1","0","3","1","3"]));
-t1.add(new SimpleColumn("c3", "c3", Type.INT, (String[])["0","1","2","0","1","3"]));
-ts = new TableStack();
-ts.add(t1);
-ts.add(ColumnFilteredTable.class);
-t2=ts.findByClass(ColumnFilteredTable.class);
-t2.addSyntheticColumn("'c1'+'c2'");
-t2.addSyntheticColumn("'c2'*'c3'");
-assert t2.getValueAt(3,0) == 2;
-assert t2.getValueAt(4,1) == 1; 
-assert t2.getValueAt(0,3) == 1;
-assert t2.getValueAt(1,3) == 2;
-assert t2.getValueAt(3,3) == 5;
-assert t2.getValueAt(0,4) == 0;
-assert t2.getValueAt(1,4) == 1;
-assert t2.getValueAt(5,4) == 9;
-
-assert MergedTable.makeShortNames(["Test"]) == ["Test":"Test"];
-assert MergedTable.makeShortNames(["Test1","Test2"]) == ["Test1":"1", "Test2":"2"];
-assert MergedTable.makeShortNames(["1Test","2Test"]) == ["1Test":"1", "2Test":"2"];
-assert MergedTable.makeShortNames(["Waelzer","Walzer"]) == ["Waelzer":"e", "Walzer":""];
-assert MergedTable.makeShortNames(["Waelzer","Walzer","Wasser"]) == ["Waelzer":"elz", "Walzer":"lz", "Wasser":"ss"];
-assert MergedTable.makeShortNames(["abcde","xyz"]) == ["abcde":"abcde", "xyz":"xyz"];
-
-t2=new SimpleTable("Test2", "Test2");
-t2.add(new SimpleColumn("c1", "c1", Type.INT, (String[])["0","7"]));
-t2.add(new SimpleColumn("c2", "c2", Type.INT, (String[])["6","1"]));
-ts=new TableStack();
-ts.add(t1);
-ts.add(MergedTable.class, "Merge");
-t3=ts.findByName("Merge");
-assert t3.rowCount == 6;
-assert t3.getValueAt(1,0) == 1;
-assert t3.getValueAt(3,0) == 2;
-assert t3.getValueAt(3,1) == 3;
-t3.add(t2);
-assert t3.rowCount == 8;
-assert t3.getColumnByName("c1").length() == 8;
-assert t3.getValueAt(0,0) == '"1"';
-assert t3.getValueAt(5,0) == '"1"';
-assert t3.getValueAt(6,0) == '"2"';
-assert t3.getValueAt(7,0) == '"2"';
-assert t3.getValueAt(1,1) == 1;
-assert t3.getValueAt(3,1) == 2;
-assert t3.getValueAt(7,1) == 7;
-assert t3.getValueAt(3,2) == 3;
-assert t3.getValueAt(6,2) == 6;
-
+	
 v = new VdbenchExplorerGUI();
 
