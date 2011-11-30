@@ -1,0 +1,182 @@
+VdbenchExplorer is a tool for graphical analysis of 
+[http://sourceforge.net/projects/vdbench Vdbench] data, written in 
+[http://groovy.codehaus.org/ Groovy]. Main goal of this tool is to make 
+graphical exploration of the data easy by allowing for easy reorganisation 
+of the plots.  
+
+= Motivation =
+
+I found that repeated command line editing in gnuplot was too slow and 
+cumbersome to quickly explore multicolumn data. However, gnuplot is still a 
+great tool and has a lot of other advantages compared to this program. 
+
+I've chosen Groovy for this task because it's a compact and neat language 
+like Ruby and at the same time can make direct use of the powerful Java 
+Swing library.
+
+= Installation =
+
+You need
+
+* a Java runtime library, >= J2SE 5.0 should work
+* Groovy, >=1.6.x should work
+* the (a bit outdated) [http://jplot.sourceforge.net/ JPlot-Library], version 
+  1.2.2 von 2003 is current.
+* the Groovy script VdbenchExplorer.groovy
+
+= Use =
+
+Assuming that the jplot library is in the classpath and that Groovy is in
+the shell search path, VdbenchExplorer is started as follows:
+<pre>
+$ echo $CLASSPATH
+/Users/jf/Local/lib/JPlot.jar
+$ groovy VdbenchExplorer.groovy
+</pre>
+There are no command line options yet.
+
+In the main menu you select a vdbench result file ("flatfile.html") with 
+"File->Open". You can add further vdbench result files for comparison later 
+with "File->Add Table". You can remove individual vdbench result files later
+with "File->Remove Table".
+
+When you have loaded more than one vdbench result file, there is an additional 
+column "Dataset" which serves to distinguish between the several result files.
+
+== Working with Columns ==
+
+The table is always sorted along the first column in ascending order. If this 
+column has non-unique values, the concerning rows are also ordered along the 
+second column and so on with further columns if needed. 
+
+You can remove a column from the view by right clicking on the column head 
+-> "Remove column".
+
+=== Plotting Columns ===
+
+In order to plot two or more columns you select them for plotting by right
+clicking on the column head and selecting "Plot". (If the context menu says
+"Don't Plot" the column is already being plotted.) By selecting "Plot" the 
+column head's color becomes white/black. 
+
+The first plotted column is always the x axis for all plot windows, every other 
+column marked as "Plot" serves as the y axis in its own separate plot window.
+I.e. when there are 4 columns marked as "Plot" you have 3 plot windows and the
+first column is the x axis in all 3 of them.
+
+You determine which column becomes the x axis by dragging around the columns  
+(always the left-mosted plotted column). This allows for rapid switching 
+through different dependencies.  
+
+=== Grouping ===
+
+You can (and probably will) group the data points according to one or more 
+columns. Data points belonging to different groups are then plotted with 
+connected lines, with a different line color for every group. Line colors
+are automatically chosen by VdbenchExplorer (because I didn't like the
+idea to have to chose a different color assignment everytime I change the
+grouping, which is supposed to happen very often when exploring data). 
+The grouping color is also automatically reflected in the graph legends. You 
+activate grouping of a column by right clicking on the column head and select 
+"Group by". Grouping is a powerful tool for analysing data.
+
+It is not useful to group by columns which have a high cardinality. I.e. 
+columns with more than 100 different values are not selectable for grouping.
+
+You can select one or more columns for simultaneous grouping. Please note that
+by combining mutliple columns for grouping the number of groups may become
+very large very quickly (up to n^m when n is the number of rows and m the
+number of grouped columns).
+
+Columns that are grouped by are marked yellow.
+
+=== Synthetic Columns ===
+
+You can create "synthetic" columns from existing ones by using Groovy 
+expressions. These synthetic columns can be plotted and/or grouped by.
+
+A synthetic column can be created with "Main Menu->Column->Synthetic column". 
+A window pops up in which you can enter a valid Groovy expression. Columns 
+are referenced by the respective column name in single quotes, e.g. 
+
+ 'MB/sec'/'threads'
+
+creates a column with throughput over number of threads.
+
+== Working with Rows ==
+
+=== Filtering Rows ===
+
+Row filtering helps to explore data by reducing the number of plotted data 
+points. You create a row filter by right clicking on a table field and 
+selecting "Only this value" or "Exclude this value". Only rows that have 
+exactly this value in this column are then shown ("Only this value") or
+suppressed ("Exclude this value"). You can exclude more than one value
+per column. 
+
+Columns that have one or more row filters are marked with a read column head.
+
+You can reset all row filters for a column by right clicking on the column
+head and selecting "Remove row filters for this column".
+
+== Colors of Column Heads ==
+
+Since a column can have multiple status simultaneously (grouped by, row 
+filtered, plotted), there needs to be a color scheme for combined statuses.
+
+{| border="1"
+ ! Foreground   !! Background   !! Meaning
+ |-
+ |black         || white        || default
+ |-
+ |white         || black        || plotted
+ |-
+ |black         || red          || row filtered
+ |-
+ |black         || yellow       || grouped by
+ |-
+ |black         || orange       || row filtered and grouped by
+ |-
+ |red           || black        || plotted and row filtered
+ |-
+ |yellow        || black        || plotted and grouped by
+ |-
+ |orange        || black        || plotted, row filtered and grouped by
+|}
+
+= Known Bugs =
+
+* Creating synthetic columns currently resets column order to the default order.
+
+= Vdbench Configuration =
+
+This section has nothing to do with VdbenchExplorer. But I like to use the 
+following script for vdbench runs. It takes a raw device as argument on the 
+command line. Before running vdbench the script starts a vi and urges you to 
+describe your setup regarding machine, storage, number of disks etc. Be as 
+detailed as possible. This should help you to remember your setup and 
+understand the context of your data some days or weeks later. The description 
+is saved in the file setup.txt.
+ 
+<pre>
+$ cat vdbench.sh
+dev=$1
+
+dir=`echo $dev | tr '/' '_'`.`date +'%Y%m%d%H%M%S'`
+mkdir -p results/$dir
+echo Describe system:
+vi results/$dir/setup.txt
+
+workfile=/tmp/vdbench.sh.$$
+cat <<EOF > $workfile
+sd=sd1,lun=$dev,size=10g
+
+rd=random_write_max,wd=random_write,iorate=max,elapsed=10,interval=1,forthreads=(1-256,d),forxfersize=(4k,8k,16k,64k,256k)
+rd=random_read_max,wd=random_read,iorate=max,elapsed=10,interval=1,forthreads=(1-256,d),forxfersize=(4k,8k,16k,64k,256k)
+rd=sequential_write_max,wd=sequential_write,iorate=max,elapsed=10,interval=1,forthreads=(1-256,d),forxfersize=(4k,8k,16k,64k,256k)
+rd=sequential_read_max,wd=sequential_read,iorate=max,elapsed=10,interval=1,forthreads=(1-256,d),forxfersize=(4k,8k,16k,64k,256k)
+EOF
+./vdbench -o results/$dir -f $workfile
+rm -f $workfile
+
+</pre>
