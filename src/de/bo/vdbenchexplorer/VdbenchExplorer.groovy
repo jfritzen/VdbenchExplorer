@@ -1566,11 +1566,9 @@ class Plot {
 		plotFrame.title=(description!=null) ? description :
 				cx.columnHead.name+" - "+cy.columnHead.name;
 		plotFrame.addWindowListener(new WindowAdapter2({
-			if (plotFrame) {
-				plotFrame.dispose();
-				plotFrame = null;
-			}
+			kill();
 			cy.plotted=false;
+			vegui.updatePlots();
 			vegui.repaintTableHeader();
 		}));
 		
