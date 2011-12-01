@@ -1324,7 +1324,11 @@ class ConstColumn extends Column {
 		} else {
 			t = (double) x;
 		}
-		return (double[]) (1..length).collect { t };
+		if (length>0) {
+			return (double[]) (1..length).collect { t };
+		} else {
+			return (double[])[];
+		}
 	}
 }
 
