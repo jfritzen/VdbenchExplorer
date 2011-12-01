@@ -33,14 +33,6 @@ import jplot.*;
 enum Type { DATETIME, TIME, LABEL, INT, FLOAT };
 
 /* TODO: unsolved bugs
- * - closing a plot window throws an exception
- * Exception in thread "AWT-EventQueue-0" java.lang.NullPointerException: Cannot invoke method dispose() on null object
- * ...
- * at de.bo.vdbenchexplorer.Plot$1.windowClosing(VdbenchExplorer.groovy:809)
- * - row filtering: removing all data leads to orphaned plot windows and an exception:
- * Exception in thread "AWT-EventQueue-0" org.codehaus.groovy.runtime.InvokerInvocationException: groovy.lang.GroovyRuntimeException: Infinite loop in 0.upto(-1)
- * ...
- * at de.bo.vdbenchexplorer.ProxyColumn.getDoubles(VdbenchExplorer.groovy:641)
  * - sometimes when moving columns an exception occurs:
  * Exception in thread "AWT-EventQueue-0" java.lang.NullPointerException: Cannot invoke method getRow() on null object
  * ...
@@ -1153,8 +1145,10 @@ class ProxyColumn extends Column {
 	double[] getDoubles() {
 		def dr = realCol.getDoubles();
 		def dv = [];
-		0.upto(length()-1) {
-			dv << dr[rm.virt2real(it)];
+		if (length()>0) {
+			0.upto(length()-1) {
+				dv << dr[rm.virt2real(it)];
+			}
 		}
 		return dv;
 	}
@@ -1460,13 +1454,13 @@ class Plot {
 	Graph_2D graph;
 	GraphSettings gs;
 	Dimension box;
-	private TableStack ts = null;
+	private VdbenchExplorerGUI vegui = null;
 	
 	private final def swing;
 	private final def saveDialog;
 	private def popup;
 	
-	Plot() {
+	private Plot() {
 		plotFrame = new JFrame();
 		p = new JPanel(new BorderLayout());
 		plotFrame.getContentPane().add(p);
@@ -1478,16 +1472,16 @@ class Plot {
 				fileSelectionMode: JFileChooser.FILES_ONLY) {};  		
 	}	
 	
-	Plot(Column c1, Column c2, TableStack ts) {
-		this(c1, c2, ts, null);
+	Plot(Column c1, Column c2, VdbenchExplorerGUI vegui) {
+		this(c1, c2, vegui, null);
 	}	
 	
-	Plot(Column c1, Column c2, TableStack ts, Column[] g) {
+	Plot(Column c1, Column c2, VdbenchExplorerGUI vegui, Column[] g) {
 		this();
 		assert c1.length() == c2.length();
 		this.cx = c1;
 		this.cy = c2;
-		this.ts = ts;
+		this.vegui = vegui;
 		this.groupby = g;
 		init();
 	}	
@@ -1517,6 +1511,11 @@ class Plot {
 		//println "px="+cx.columnHead.name+" py="+cy.columnHead.name;
 		double[] x = cx.getDoubles();
 		double[] y = cy.getDoubles();
+
+		if (x == null || x == [] || y == null || y == []) {
+			kill();
+			return;
+		}		
 		
 		p.removeAll();
 		
@@ -1567,8 +1566,12 @@ class Plot {
 		plotFrame.title=(description!=null) ? description :
 				cx.columnHead.name+" - "+cy.columnHead.name;
 		plotFrame.addWindowListener(new WindowAdapter2({
-			plotFrame.dispose();
-			plotFrame = null;
+			if (plotFrame) {
+				plotFrame.dispose();
+				plotFrame = null;
+			}
+			cy.plotted=false;
+			vegui.repaintTableHeader();
 		}));
 		
 		def da = [];
@@ -1644,7 +1647,7 @@ class Plot {
 		}	
 		graph = new Graph_2D(gs);
 		graph.show(v);
-		def filterDescription = ts.findByName("RowFilter").currentFilterDescription();
+		def filterDescription = vegui.getTableStack().findByName("RowFilter").currentFilterDescription();
 		
 		popup = swing.popupMenu(id:"popupplot") {
 			menuItem() {
@@ -2015,7 +2018,7 @@ class VdbenchExplorerGUI {
 	private final def menubar1;
 	private final def menubar2;
 	
-	VdbenchExplorerGUI() {
+	public VdbenchExplorerGUI() {
 		swing = new SwingBuilder();
 		
 		openDialog  = swing.fileChooser(
@@ -2180,7 +2183,7 @@ class VdbenchExplorerGUI {
 		about = swing.action(name:'About', closure:{
 			JOptionPane.showMessageDialog(frame, '''
 (c) $Date$ Baltic Online Computer GmbH 
-By:  Jochen Fritzenk�tter
+By:  Jochen Fritzenkötter
 $URL$
 $Revision$
 						''', "About", 
@@ -2437,7 +2440,7 @@ $Revision$
 				} else {
 					//println "create new";
 					//println "adding "+xcol+" "+ycol;
-					plots << new Plot(xcol, ycol, ts, groupby);
+					plots << new Plot(xcol, ycol, this, groupby);
 				}
 			}
 		}
@@ -2449,6 +2452,15 @@ $Revision$
 		}
 		
 	}
+	
+	void repaintTableHeader() {
+		jt2.tableHeader.repaint();
+	}
+	
+	TableStack getTableStack() {
+		return ts;
+	}
+
 }
 
 if (new File("tdata").exists()) {
