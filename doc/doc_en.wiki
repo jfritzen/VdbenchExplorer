@@ -1,0 +1,132 @@
+VdbenchExplorer is a tool written in [http://groovy.codehaus.org/ Groovy] for graphical analysis of one or more [[Vdbench]] outputs. Main goal of the tool was to allow for a quick visual overview over the several measured data sets and potential dependencies among each other.
+
+= Installation =
+
+You need
+
+* Java runtime library, >= J2SE 5.0 should work
+* Groovy, >= 1.6.x should work, e.g. from [http://www.macports.org/ports.php?by=name&substr=groovy MacPorts] for Mac OS.
+* The (somewhat dated) [http://jplot.sourceforge.net/ JPlot-Library]. Version 1.2.2 from 2003 seems to be the latest available
+* The groovy script VdbenchExplorer.groovy
+
+= Usage =
+
+Given that the JPlot library is present in the CLASSPATH variable and that groovy is in the search path, VdbenchExplorer is started as follows:
+<pre>
+macbook:~ jf$ echo $CLASSPATH
+/Users/jf/Local/lib/JPlot.jar
+macbook:~ jf$ groovy VdbenchExplorer.groovy
+</pre>
+There are no command line options yet.
+
+The main menu appears in which one chooses a Vdbench flatfile.html with "File->Option". Additional flatfile.html files from other vdbench runs may be added afterwards using "File->Add Table", in order to compare these test runs. Individual test runs can be removed from VdbenchExplorer again with "File->Remove Table" 
+
+When there are data from more than one test run, an additional virtual column "Dataset" based on the filename is automatically created in order to distinguish between the different test runs.
+
+== Working with columns ==
+
+The displayed table is always sorted along the first column in ascending order. If there are non-unique values in this column, the rows are sorted according to the 2nd, 3rd, 4th column etc. If you wish to sort columns along another column, you have to drag&drop that column to the first position.
+
+You can remove columns from the view via the context menu of the respective column head (right click -> "Remove column").
+
+=== Plotting ===
+
+Plotting of columns is done via the context menu of the column head (right click -> "Plot" or "Don't Plot" in order to deselect a column from plotting). Columns marked for plotting have a black column head. In order to create a plot at least two columns have to be marked for plotting. The most left column marked for plotting is the x axis (always), for all other column one plot window is created with the respective column plotted as y axis. Swapping the most left column marked for plotting with another via drag&drop makes that other column the new x axis in all plot windows. This helps to quickly identify potential dependencies.
+
+=== Grouping ===
+
+You can plot subsets of data points as individual plot lines by grouping them according to the values of one or more grouping columns, i.e. depending on the values in the grouping columns, data points are assigned to individual plot lines with different plot colours each. This allows to visualize relations between data points. Grouping applies to all plot windows simultaneously. Each plot line belonging to one group is assigned the same colour in every plot window. For each plot line there is a legend in each plot window. A column is marked as grouping column via the context menu of the column head -> "Group by". A column is deselected from grouping by -> "Don't group by". Grouping columns have a yellow column head.
+
+It is not possible (nor useful) to group data by columns with high cardinality: Columns with more than 100 different values are not allowed for grouping.
+
+=== Synthetic columns ===
+
+New, synthetic columns can be created from existing columns by arbitrary Groovy expressions. These columns can be used just like any other column, i.e. also for plotting or grouping.
+
+You can create a synthetic column via "Main menu->Column->Synthetic column". A box appears in which arbitrary Groovy expressions can be entered. Existing columns can be referenced by their name in single quotes ('). E.g.:
+
+ 'MB/sec'/'threads'
+
+creates a column with throughput per io thread.
+
+Currently there is a limitation that creation of a synthetic column automatically resets the column order to default order. This is inconvenient and will be improved in the future.
+
+== Working with rows ==
+
+=== Filtering rows ===
+
+Row filters help to visualize dependencies by thinning out the "cloud" of data points. They are created by the context menu of an arbitrary table *cell* (right click -> "Only this value" (or "Exclude this value")). This retains only those rows in the view and all plots, whose exact value in that column does (not) match the value of the selected cell. You may create multiple row filters by selecting multiple cells, which is useful only for "Exclude this value" however.  
+
+Rows with row filters on them are marked with a red column head.
+
+"-> Remove row filters for this column" on a column *head* removes all row filters for that column.
+
+== Colours of the column heads ==
+
+{| border="1"
+ !Foreground colour   !!Background colour  !!Meaning
+ |-
+ |black               ||white              ||Default
+ |-
+ |white               ||black              ||Column selected for plotting
+ |
+ |black               ||red                ||Row filter on this column
+ |-
+ |black               ||yellow             ||Column selected for grouping
+ |-
+ |black               ||orange             ||Row filter *and* grouping active on this column
+ |-
+ |red                 ||black              ||Row filter *and* plotting active on this column
+ |-
+ |yellow              ||black              ||Column is marked for plotting *and* grouping (hardly useful)
+ |-
+ |orange              ||black              ||Column is plotted, row filtered and grouped by (hardly useful)
+|}
+
+== Saving plots ==
+
+By right clicking on an individual plot window you can save a plot in PNG format. The GUI suggests a default filename based on the plotted columns, row filters etc.
+
+= Known bugs and limitations =
+
+* Occasionally dragging & dropping of columns creates Java stack traces, which are harmless however.
+* Adding a synthetic column resets the column order to default order, which is inconvenient.
+
+= Feature wish list =
+
+* Zoom into plot windows
+* Selected rows in the table should automatically be highlighted in the plot windows also in order to help identifying the data points there.
+* Info in the individual plot windows describing the current row filters
+
+= Vdbench run script =
+
+I like to use the following run script for vdbench. It takes a raw volume as argument. Before starting the vdbench run, the script asks for a description of the current lab setup (e.g. host type, storage type, RAID and LUN configuration etc), starts vi and saves the buffer to "setup.txt". The description should be rather detailed in order to allow for comparison between this run and other, archived vdbench runs.  
+
+<pre>
+macbook:~ jf$ cat vdbench.sh
+dev=$1
+
+dir=`echo $dev | tr '/' '_'`.`date +'%Y%m%d%H%M%S'`
+mkdir -p results/$dir
+echo Describe the lab setup:
+vi results/$dir/setup.txt
+
+workfile=/tmp/vdbench.sh.$$
+cat <<EOF > $workfile
+sd=sd1,lun=$dev,size=10g
+
+wd=sequential_write,sd=sd1,rdpct=0,seekpct=sequential
+wd=sequential_read,sd=sd1,rdpct=100,seekpct=sequential
+wd=random_write,sd=sd1,rdpct=0,seekpct=random
+wd=random_read,sd=sd1,rdpct=100,seekpct=random
+wd=random_write_read,sd=sd1,rdpct=50,seekpct=random
+rd=random_write_max,wd=random_write,iorate=max,elapsed=10,interval=1,forthreads=(1-16,d),forxfersize=(4k,8k,16k,64k,256k)
+rd=random_read_max,wd=random_read,iorate=max,elapsed=10,interval=1,forthreads=(1-16,d),forxfersize=(4k,8k,16k,64k,256k)
+rd=sequential_write_max,wd=sequential_write,iorate=max,elapsed=10,interval=1,forthreads=(1-16,d),forxfersize=(4k,8k,16k,64k,256k)
+rd=sequential_read_max,wd=sequential_read,iorate=max,elapsed=10,interval=1,forthreads=(1-16,d),forxfersize=(4k,8k,16k,64k,256k)
+EOF
+./vdbench -o results/$dir -f $workfile
+rm -f $workfile
+
+</pre>
+
