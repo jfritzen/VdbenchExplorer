@@ -1,91 +1,163 @@
-VdbenchExplorer is a tool written in [http://groovy.codehaus.org/ Groovy] for graphical analysis of one or more [[Vdbench]] outputs. Main goal of the tool was to allow for a quick visual overview over the several measured data sets and potential dependencies among each other.
+VdbenchExplorer is a tool for graphical analysis of 
+[http://sourceforge.net/projects/vdbench Vdbench] data, written in 
+[http://groovy.codehaus.org/ Groovy]. Main goal of this tool is to make 
+graphical ad-hoc exploration of data easy by allowing for easy  
+reorganisation of the plots.
+
+= Motivation =
+
+I found that repeated command line editing in Gnuplot was too slow and 
+cumbersome to quickly explore multicolumn data. And Gnuplot batch files were too inflexible.
+However, gnuplot is still a great tool and has a lot of other advantages. 
+
+I've chosen Groovy for this task because it's a compact and neat language 
+like Ruby and at the same time can make direct use of the powerful Java 
+Swing library.
 
 = Installation =
 
 You need
 
-* Java runtime library, >= J2SE 5.0 should work
-* Groovy, >= 1.6.x should work, e.g. from [http://www.macports.org/ports.php?by=name&substr=groovy MacPorts] for Mac OS.
-* The (somewhat dated) [http://jplot.sourceforge.net/ JPlot-Library]. Version 1.2.2 from 2003 seems to be the latest available
-* The groovy script VdbenchExplorer.groovy
+* a Java runtime library, >= J2SE 5.0 should work
+* Groovy, >=1.6.x should work
+* the (a bit outdated) [http://jplot.sourceforge.net/ JPlot library], version 
+1.2.2 from 2003 is current.
+* the Groovy script VdbenchExplorer.groovy
 
 = Usage =
 
-Given that the JPlot library is present in the CLASSPATH variable and that groovy is in the search path, VdbenchExplorer is started as follows:
+= Use =
+
+Assuming that the JPlot library is in the classpath and that Groovy is in
+the shell search path, VdbenchExplorer is started as follows:
 <pre>
-macbook:~ jf$ echo $CLASSPATH
+$ echo $CLASSPATH
 /Users/jf/Local/lib/JPlot.jar
-macbook:~ jf$ groovy VdbenchExplorer.groovy
+$ groovy VdbenchExplorer.groovy
 </pre>
 There are no command line options yet.
 
-The main menu appears in which one chooses a Vdbench flatfile.html with "File->Option". Additional flatfile.html files from other vdbench runs may be added afterwards using "File->Add Table", in order to compare these test runs. Individual test runs can be removed from VdbenchExplorer again with "File->Remove Table" 
+In the main menu you select a vdbench result file ("flatfile.html") with 
+"File->Open". You can add further vdbench result files for comparison later 
+with "File->Add Table". You can remove individual vdbench result files later
+with "File->Remove Table".
 
-When there are data from more than one test run, an additional virtual column "Dataset" based on the filename is automatically created in order to distinguish between the different test runs.
+When you have loaded more than one vdbench result file, there is an additional 
+column "Dataset" which serves to distinguish between the several result files.
 
-== Working with columns ==
+== Working with Columns ==
 
-The displayed table is always sorted along the first column in ascending order. If there are non-unique values in this column, the rows are sorted according to the 2nd, 3rd, 4th column etc. If you wish to sort columns along another column, you have to drag&drop that column to the first position.
+The table is always sorted along the first column in ascending order. If this 
+column has non-unique values, the concerning rows are also ordered along the 
+second column and so on with further columns if needed. 
 
-You can remove columns from the view via the context menu of the respective column head (right click -> "Remove column").
+You can remove a column from the view by right clicking on the column head 
+-> "Remove column".
 
-=== Plotting ===
+=== Plotting Columns ===
 
-Plotting of columns is done via the context menu of the column head (right click -> "Plot" or "Don't Plot" in order to deselect a column from plotting). Columns marked for plotting have a black column head. In order to create a plot at least two columns have to be marked for plotting. The most left column marked for plotting is the x axis (always), for all other column one plot window is created with the respective column plotted as y axis. Swapping the most left column marked for plotting with another via drag&drop makes that other column the new x axis in all plot windows. This helps to quickly identify potential dependencies.
+In order to plot two or more columns you select them for plotting by right
+clicking on the column head and selecting "Plot". (If the context menu says
+"Don't Plot" the column is already being plotted.) By selecting "Plot" the 
+column head's color becomes white/black. 
+
+The first plotted column is always the x axis for all plot windows, every other 
+column marked as "Plot" serves as the y axis in its own separate plot window.
+I.e. when there are 4 columns marked as "Plot" you have 3 plot windows and the
+first column is the x axis in all 3 of them.
+
+You determine which column becomes the x axis by dragging around the columns  
+(always the left-mosted plotted column). This allows for rapid switching 
+through different dependencies.
+
+Data points always are connected in the same order as they appear in the
+table. If you want to change the order of the connected points, you have to
+drag around the column heads. This is intentional behaviour and can be useful,
+e.g. ordering plotted data points by time while plotting two other columns as 
+x and y.
 
 === Grouping ===
 
-You can plot subsets of data points as individual plot lines by grouping them according to the values of one or more grouping columns, i.e. depending on the values in the grouping columns, data points are assigned to individual plot lines with different plot colours each. This allows to visualize relations between data points. Grouping applies to all plot windows simultaneously. Each plot line belonging to one group is assigned the same colour in every plot window. For each plot line there is a legend in each plot window. A column is marked as grouping column via the context menu of the column head -> "Group by". A column is deselected from grouping by -> "Don't group by". Grouping columns have a yellow column head.
+You can (and probably will) group the data points according to one or more 
+columns. Data points belonging to different groups are then plotted with 
+connected lines, with a different line color for every group. Line colors
+are automatically chosen by VdbenchExplorer (because I didn't like the
+idea to have to choose a different color assignment everytime I change the
+grouping, which is supposed to happen very often when exploring data). 
+The grouping color is also automatically reflected in the graph's legend. You 
+activate grouping of a column by right clicking on the column head and select 
+"Group by". Grouping is a powerful tool for analysing data.
 
-It is not possible (nor useful) to group data by columns with high cardinality: Columns with more than 100 different values are not allowed for grouping.
+It is not useful to group by columns which have a high cardinality. I.e. 
+columns with more than 100 different values are not selectable for grouping.
 
-=== Synthetic columns ===
+You can select one or more columns for simultaneous grouping. Please note that
+by combining mutliple columns for grouping the number of groups may become
+very large very quickly (up to n^m when n is the number of rows and m the
+number of grouped columns).
 
-New, synthetic columns can be created from existing columns by arbitrary Groovy expressions. These columns can be used just like any other column, i.e. also for plotting or grouping.
+Columns that are grouped by are marked yellow.
 
-You can create a synthetic column via "Main menu->Column->Synthetic column". A box appears in which arbitrary Groovy expressions can be entered. Existing columns can be referenced by their name in single quotes ('). E.g.:
+=== Synthetic Columns ===
+
+You can create "synthetic" columns from existing ones by using Groovy 
+expressions. These synthetic columns can be plotted and/or grouped by.
+
+A synthetic column can be created with "Main Menu->Column->Synthetic column". 
+A window pops up in which you can enter a valid Groovy expression. Columns 
+are referenced by the respective column name in single quotes, e.g. 
 
  'MB/sec'/'threads'
 
-creates a column with throughput per io thread.
+creates a column with throughput over number of threads.
 
-Currently there is a limitation that creation of a synthetic column automatically resets the column order to default order. This is inconvenient and will be improved in the future.
+== Working with Rows ==
 
-== Working with rows ==
+=== Filtering Rows ===
 
-=== Filtering rows ===
+Row filtering helps to explore data by reducing the number of plotted data 
+points. You create a row filter by right clicking on a table field and 
+selecting "Only this value" or "Exclude this value". Only rows that have 
+exactly this value in this column are then shown ("Only this value") or
+suppressed ("Exclude this value"). You can exclude more than one value
+per column. 
 
-Row filters help to visualize dependencies by thinning out the "cloud" of data points. They are created by the context menu of an arbitrary table *cell* (right click -> "Only this value" (or "Exclude this value")). This retains only those rows in the view and all plots, whose exact value in that column does (not) match the value of the selected cell. You may create multiple row filters by selecting multiple cells, which is useful only for "Exclude this value" however.  
+Columns that have one or more row filters are marked with a read column head.
 
-Rows with row filters on them are marked with a red column head.
+You can reset all row filters for a column by right clicking on the column
+head and selecting "Remove row filters for this column".
 
-"-> Remove row filters for this column" on a column *head* removes all row filters for that column.
+== Colors of Column Heads ==
 
-== Colours of the column heads ==
+Since a column can have multiple statūs simultaneously (grouped by, row 
+filtered, plotted), there needs to be a color scheme for combined statūs.
 
 {| border="1"
- !Foreground colour   !!Background colour  !!Meaning
+ ! Foreground   !! Background   !! Meaning
  |-
- |black               ||white              ||Default
+ |black         || white        || default
  |-
- |white               ||black              ||Column selected for plotting
- |
- |black               ||red                ||Row filter on this column
+ |white         || black        || plotted
  |-
- |black               ||yellow             ||Column selected for grouping
+ |black         || red          || row filtered
  |-
- |black               ||orange             ||Row filter *and* grouping active on this column
+ |black         || yellow       || grouped by
  |-
- |red                 ||black              ||Row filter *and* plotting active on this column
+ |black         || orange       || row filtered and grouped by
  |-
- |yellow              ||black              ||Column is marked for plotting *and* grouping (hardly useful)
+ |red           || black        || plotted and row filtered
  |-
- |orange              ||black              ||Column is plotted, row filtered and grouped by (hardly useful)
+ |yellow        || black        || plotted and grouped by (not very useful)
+ |-
+ |orange        || black        || plotted, row filtered and grouped by (not very useful)
 |}
 
-== Saving plots ==
+= Exporting Plots to PNG =
 
-By right clicking on an individual plot window you can save a plot in PNG format. The GUI suggests a default filename based on the plotted columns, row filters etc.
+You can save a plot in PNG format by right clicking on a plot window. 
+VdbenchExplorer tries to guess a suitable default file name from the names of 
+x and y axis and the currently applied row filters. But of course you can
+give it any name you want in the file selection dialog.
 
 = Known bugs and limitations =
 
@@ -98,12 +170,19 @@ By right clicking on an individual plot window you can save a plot in PNG format
 * Selected rows in the table should automatically be highlighted in the plot windows also in order to help identifying the data points there.
 * Info in the individual plot windows describing the current row filters
 
-= Vdbench run script =
+= Vdbench Configuration =
 
-I like to use the following run script for vdbench. It takes a raw volume as argument. Before starting the vdbench run, the script asks for a description of the current lab setup (e.g. host type, storage type, RAID and LUN configuration etc), starts vi and saves the buffer to "setup.txt". The description should be rather detailed in order to allow for comparison between this run and other, archived vdbench runs.  
+This section has nothing to do with VdbenchExplorer. But I like to use the 
+following script for vdbench runs. It is run from the same directory in which
+vdbench is located. It takes a raw device as argument on the command line. 
+Before running vdbench the script starts a vi and asks you to 
+describe your setup regarding machine, storage, number of disks etc. Be as 
+detailed as possible. This should help you to remember your setup and 
+understand the context of your vdbench data days or weeks later. The 
+description is saved in the file setup.txt.
 
 <pre>
-macbook:~ jf$ cat vdbench.sh
+$ cat vdbench.sh
 dev=$1
 
 dir=`echo $dev | tr '/' '_'`.`date +'%Y%m%d%H%M%S'`
@@ -127,6 +206,5 @@ rd=sequential_read_max,wd=sequential_read,iorate=max,elapsed=10,interval=1,forth
 EOF
 ./vdbench -o results/$dir -f $workfile
 rm -f $workfile
-
 </pre>
 
