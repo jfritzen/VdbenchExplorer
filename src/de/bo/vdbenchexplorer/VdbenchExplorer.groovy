@@ -1,3 +1,7 @@
+/* Plot tables
+ * Jochen Fritzenkötter, Baltic Online Computer GmbH, Kiel 2009-2013
+ */
+
 package de.bo.vdbenchexplorer;
 
 import groovy.lang.GroovyShell;
@@ -25,6 +29,7 @@ import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
+import javax.swing.plaf.basic.BasicButtonListener;
 
 import org.w3c.dom.ls.LSException;
 
@@ -137,6 +142,14 @@ abstract class Table extends AbstractTableModel {
 	
 	String[] boringColumns() {
 		return (String[])[];
+	}
+	
+	/* Returns an array with preconfigured column orders.
+	 * This default implementation returns an empty hash.
+	 * Have a look at the implementing classes.
+	 */
+	ArrayList preconf_order_and_plot() {
+		return [];
 	}
 	
 	void print() {
@@ -253,6 +266,14 @@ class VdbenchFlatfileTable extends Table {
 		def list = [ "reqrate", "xfersize", "lunsize", "version", "ks_rate", 
 				"ks_resp", "ks_svct", "ks_mb", "ks_read%", "ks_bytes" ];
 		return list;
+	}
+	
+	ArrayList preconf_order_and_plot() {
+		return [
+		        	["bytes/io", "resp"],
+		        	["rate", "resp"],
+		        	["threads", "MB/sec"]
+        ];
 	}
 }
 
@@ -424,17 +445,17 @@ class SarOutputTable extends Table {
 
 class SortedTable extends Table {
 	Table masterTable;
-	JTable jt=null;
+	JTable2 jt2=null;
 	RowMap rm;
 	
 	SortedTable(Table t) {
 		this(t, null);
 	}
 	
-	SortedTable(Table t, JTable jt) {
+	SortedTable(Table t, JTable2 jt2) {
 		super(t.name, t.description);
 		this.masterTable=t;
-		this.jt=jt;
+		this.jt2=jt2;
 		rm = new RowMap();
 		init();
 		sort();
@@ -446,7 +467,8 @@ class SortedTable extends Table {
 		rm.init(masterTable.cols[0].length());
 		/*		println "this="+this+" c="+masterTable.getColumnCount()+
 		 " r="+masterTable.getRowCount()+" m="+masterTable;
-		 */		masterTable.cols.each { col ->
+		 */		
+		masterTable.cols.each { col ->
 			c = new ProxyColumn(rm, col);
 			cols << c;
 		}
@@ -457,8 +479,8 @@ class SortedTable extends Table {
 		sort();
 	}
 	
-	void setJTable(JTable jt) {
-		this.jt = jt;
+	void setJTable2(JTable2 jt2) {
+		this.jt2 = jt2;
 	}
 	
 	/* Sort all columns from top to down and from left to right:
@@ -547,10 +569,10 @@ class SortedTable extends Table {
 	}
 	
 	private int mapColumn(int col) {
-		if (jt==null) {
+		if (jt2==null) {
 			return col;
 		} else {
-			return jt.convertColumnIndexToModel(col);
+			return jt2.convertColumnIndexToModel(col);
 		}
 	}
 }
@@ -1765,6 +1787,26 @@ class TCMListener implements TableColumnModelListener {
 	}
 }
 
+class OrderAndPlotPresetButtonListener implements ActionListener {
+	ArrayList al;
+	TableStack ts;
+	
+	OrderAndPlotPresetButtonListener(TableStack ts, ArrayList al) {
+		this.al = al;
+		this.ts = ts;
+	}
+	
+	void actionPerformed(ActionEvent e) {
+		Table sorter = ts.findByName("Sorter");
+		JTable2 jt2 = sorter.jt2;
+		int npos = 0;
+		al.each {
+			def opos = jt2.convertColumnIndexToView(sorter.findColumn(it));
+			jt2.moveColumn(opos, npos++);
+		}
+	}
+}
+
 /* End of Listeners 
  * 
  */
@@ -2106,7 +2148,7 @@ class VdbenchExplorerGUI {
 			jt2 = new JTable2(ts.top());
 			
 			// The "Sorter" needs to know the current column order
-			ts.findByName("Sorter").setJTable(jt2);
+			ts.findByName("Sorter").setJTable2(jt2);
 			
 			// Registering for right-clicks on the TableHeader
 			jt2.tableHeader.addMouseListener(new PopupListener({
@@ -2156,7 +2198,25 @@ class VdbenchExplorerGUI {
 				jsp.revalidate();
 				frame.validate();
 			}));
+			
+			def n_order=ts.findByName("Base").preconf_order_and_plot().size();
+			def jsp_preorder;
+			if (n_order>0) {
+				def l = Box.createHorizontalBox();
+				l.add(new JLabel("Predefined Plots:"));
+				for(opset in ts.findByName("Base").preconf_order_and_plot()) {
+					def str = opset.join(", ");
+					def jb = new JButton(str);
+					jb.addActionListener(new OrderAndPlotPresetButtonListener(ts, opset));
+					l.add(jb);					
+				};
+				jsp_preorder = new JScrollPane(l);
+			}
+			
 			swing.panel.removeAll();
+			if (n_order>0) {
+				swing.panel.add(jsp_preorder, BorderLayout.CENTER);
+			}
 			swing.panel.add(jsp, BorderLayout.CENTER);
 			
 			// We need to change the File menu
