@@ -1810,6 +1810,9 @@ class OrderAndPlotPresetButtonListener implements ActionListener {
 			gui.updatePlots();
 			jt2.tableHeader.repaint();			
 		}
+		for(int i=npos; i<jt2.model.columnCount; i++) {
+			jt2.model.getColumn(jt2.convertColumnIndexToModel(i)).plotted=false;
+		}
 	}
 }
 
@@ -2429,7 +2432,7 @@ $Revision$
 		};		
 	}
 	
-	void updatePlots() {
+	synchronized void updatePlots() {
 		int count=0;
 		def xcol=-1;
 		def ycols=[];
