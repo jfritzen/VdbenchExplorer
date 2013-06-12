@@ -270,9 +270,9 @@ class VdbenchFlatfileTable extends Table {
 	
 	ArrayList preconf_order_and_plot() {
 		return [
-		        	["bytes/io", "resp"],
-		        	["rate", "resp"],
-		        	["threads", "MB/sec"]
+		        	["plot":["bytes/io", "resp"], "group":["threads","Run"]],
+		        	["plot":["rate", "resp"], "group":["bytes/io", "Run"]],
+		        	["plot":["threads", "MB/sec"], "group":["bytes/io", "Run"]]
         ];
 	}
 }
@@ -1788,12 +1788,12 @@ class TCMListener implements TableColumnModelListener {
 }
 
 class OrderAndPlotPresetButtonListener implements ActionListener {
-	ArrayList al;
+	HashMap hm;
 	TableStack ts;
 	VdbenchExplorerGUI gui;
 	
-	OrderAndPlotPresetButtonListener(TableStack ts, ArrayList al, VdbenchExplorerGUI gui) {
-		this.al = al;
+	OrderAndPlotPresetButtonListener(TableStack ts, HashMap hm, VdbenchExplorerGUI gui) {
+		this.hm = hm;
 		this.ts = ts;
 		this.gui = gui;
 	}
@@ -1802,14 +1802,23 @@ class OrderAndPlotPresetButtonListener implements ActionListener {
 		Table sorter = ts.findByName("Sorter");
 		JTable2 jt2 = sorter.jt2;
 		int npos = 0;
-		al.each {
+		hm["plot"].each {
 			int col = sorter.findColumn(it);
 			def opos = jt2.convertColumnIndexToView(col);
 			jt2.moveColumn(opos, npos++);
 			jt2.model.getColumn(col).plotted=true;
+			jt2.model.getColumn(col).groupby=false;
 		}
 		for(int i=npos; i<jt2.model.columnCount; i++) {
 			jt2.model.getColumn(jt2.convertColumnIndexToModel(i)).plotted=false;
+			jt2.model.getColumn(jt2.convertColumnIndexToModel(i)).groupby=false;
+		}
+		hm["group"].each {
+			int col = sorter.findColumn(it);
+			def pos = jt2.convertColumnIndexToView(col);
+			if (pos>=npos) {
+				jt2.model.getColumn(col).groupby=true;
+			}
 		}
 		gui.updatePlots();
 		jt2.tableHeader.repaint();			
@@ -2203,7 +2212,10 @@ class VdbenchExplorerGUI {
 				def l = Box.createHorizontalBox();
 				l.add(new JLabel("Predefined Plots:"));
 				for(opset in ts.findByName("Base").preconf_order_and_plot()) {
-					def str = opset.join(", ");
+					def str = opset["plot"].join(", ");
+					if (opset["group"]) { 
+						str += " grp:"+opset["group"].join("/");
+					}
 					def jb = new JButton(str);
 					jb.addActionListener(new OrderAndPlotPresetButtonListener(ts, opset, this));
 					l.add(jb);					
@@ -2380,17 +2392,7 @@ $Revision$
 					jt2.model.getColumn(col).groupby=
 							!jt2.model.getColumn(col).groupby;
 
-					def g = [];
-					for (i in 0..(jt2.model.getColumnCount()-1)) {
-						if (jt2.model.getColumn(i).groupby) {
-							g << jt2.model.getColumn(i); 
-						}
-					}
-					groupby = (Column[])g;			
-					plots.each { plot -> 
-						plot.groupby(groupby);
-					};
-					
+					updatePlots();
 					/* Tried many things to instantly redraw the column 
 					 * headers: 
 					 * jt2.revalidate(), jt2.repaint()
@@ -2527,6 +2529,16 @@ $Revision$
 			plot.kill();
 		}
 		
+		def g = [];
+		for (i in 0..(jt2.model.getColumnCount()-1)) {
+			if (jt2.model.getColumn(i).groupby) {
+				g << jt2.model.getColumn(i); 
+			}
+		}
+		groupby = (Column[])g;			
+		plots.each { plot -> 
+			plot.groupby(groupby);
+		};		
 	}
 	
 	void repaintTableHeader() {
