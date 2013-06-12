@@ -1801,26 +1801,32 @@ class OrderAndPlotPresetButtonListener implements ActionListener {
 	void actionPerformed(ActionEvent e) {
 		Table sorter = ts.findByName("Sorter");
 		JTable2 jt2 = sorter.jt2;
+		// Unset plotted and groupby for all columns
 		for(int i=0; i<jt2.model.columnCount; i++) {
 			jt2.model.getColumn(i).plotted=false;
 			jt2.model.getColumn(i).groupby=false;
 		}
+		/* Order the columns according to the "order" array or, if not
+		 * existing, according to the "plot" array.
+		 */		
 		int npos = 0;
 		(hm["order"]?hm["order"]:hm["plot"]).each {
 			int col = sorter.findColumn(it);
 			def opos = jt2.convertColumnIndexToView(col);
 			jt2.moveColumn(opos, npos++);
 		}
+		// Mark the columns to be grouped by 
+		hm["group"].each {
+			int col = sorter.findColumn(it);
+			jt2.model.getColumn(col).groupby=true;
+		}
+		/* Mark the columns to be plotted and make sure they are
+		 * not grouped by.
+		 */
 		hm["plot"].each {
 			int col = sorter.findColumn(it);
 			jt2.model.getColumn(col).plotted=true;
-		}
-		hm["group"].each {
-			int col = sorter.findColumn(it);
-			def pos = jt2.convertColumnIndexToView(col);
-			if (pos>=npos) {
-				jt2.model.getColumn(col).groupby=true;
-			}
+			jt2.model.getColumn(col).groupby=false;
 		}
 		gui.updatePlots();
 		jt2.tableHeader.repaint();			
