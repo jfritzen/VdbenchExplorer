@@ -1807,12 +1807,12 @@ class OrderAndPlotPresetButtonListener implements ActionListener {
 			def opos = jt2.convertColumnIndexToView(col);
 			jt2.moveColumn(opos, npos++);
 			jt2.model.getColumn(col).plotted=true;
-			gui.updatePlots();
-			jt2.tableHeader.repaint();			
 		}
 		for(int i=npos; i<jt2.model.columnCount; i++) {
 			jt2.model.getColumn(jt2.convertColumnIndexToModel(i)).plotted=false;
 		}
+		gui.updatePlots();
+		jt2.tableHeader.repaint();			
 	}
 }
 
