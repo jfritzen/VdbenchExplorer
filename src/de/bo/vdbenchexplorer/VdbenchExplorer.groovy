@@ -271,7 +271,7 @@ class VdbenchFlatfileTable extends Table {
 	ArrayList preconf_order_and_plot() {
 		return [
 		        	["plot":["bytes/io", "resp"], "group":["threads","Run"]],
-		        	["plot":["rate", "resp"], "group":["bytes/io", "Run"]],
+		        	["order":["threads", "rate", "resp"], "plot":["rate", "resp"], "group":["bytes/io", "Run"]],
 		        	["plot":["threads", "MB/sec"], "group":["bytes/io", "Run"]]
         ];
 	}
@@ -1801,17 +1801,19 @@ class OrderAndPlotPresetButtonListener implements ActionListener {
 	void actionPerformed(ActionEvent e) {
 		Table sorter = ts.findByName("Sorter");
 		JTable2 jt2 = sorter.jt2;
+		for(int i=0; i<jt2.model.columnCount; i++) {
+			jt2.model.getColumn(i).plotted=false;
+			jt2.model.getColumn(i).groupby=false;
+		}
 		int npos = 0;
-		hm["plot"].each {
+		(hm["order"]?hm["order"]:hm["plot"]).each {
 			int col = sorter.findColumn(it);
 			def opos = jt2.convertColumnIndexToView(col);
 			jt2.moveColumn(opos, npos++);
-			jt2.model.getColumn(col).plotted=true;
-			jt2.model.getColumn(col).groupby=false;
 		}
-		for(int i=npos; i<jt2.model.columnCount; i++) {
-			jt2.model.getColumn(jt2.convertColumnIndexToModel(i)).plotted=false;
-			jt2.model.getColumn(jt2.convertColumnIndexToModel(i)).groupby=false;
+		hm["plot"].each {
+			int col = sorter.findColumn(it);
+			jt2.model.getColumn(col).plotted=true;
 		}
 		hm["group"].each {
 			int col = sorter.findColumn(it);
