@@ -1790,10 +1790,12 @@ class TCMListener implements TableColumnModelListener {
 class OrderAndPlotPresetButtonListener implements ActionListener {
 	ArrayList al;
 	TableStack ts;
+	VdbenchExplorerGUI gui;
 	
-	OrderAndPlotPresetButtonListener(TableStack ts, ArrayList al) {
+	OrderAndPlotPresetButtonListener(TableStack ts, ArrayList al, VdbenchExplorerGUI gui) {
 		this.al = al;
 		this.ts = ts;
+		this.gui = gui;
 	}
 	
 	void actionPerformed(ActionEvent e) {
@@ -1801,8 +1803,12 @@ class OrderAndPlotPresetButtonListener implements ActionListener {
 		JTable2 jt2 = sorter.jt2;
 		int npos = 0;
 		al.each {
-			def opos = jt2.convertColumnIndexToView(sorter.findColumn(it));
+			int col = sorter.findColumn(it);
+			def opos = jt2.convertColumnIndexToView(col);
 			jt2.moveColumn(opos, npos++);
+			jt2.model.getColumn(col).plotted=true;
+			gui.updatePlots();
+			jt2.tableHeader.repaint();			
 		}
 	}
 }
@@ -2049,6 +2055,7 @@ class VdbenchExplorerGUI {
 	private final int margin = 10;
 	private final int groupbylimit = 100;
 	private final int delay = 500;
+	private final int preset_height = 50;
 	
 	private final def swing;
 	private final def exit;
@@ -2187,18 +2194,6 @@ class VdbenchExplorerGUI {
 				};
 			}));
 			
-			frame.setPreferredSize(new Dimension(1024,256));
-			// Resizing is very awkward, this is the best way I could
-			// do it. Took me 3 weeks to figure this out (20091013).
-			def jsp = new JScrollPane(jt2);
-			frame.addComponentListener(new ResizeListener({ 
-				jsp.preferredSize=new Dimension(
-						(int)swing.panel.size.width-margin, 
-						(int)swing.panel.size.height-margin);
-				jsp.revalidate();
-				frame.validate();
-			}));
-			
 			def n_order=ts.findByName("Base").preconf_order_and_plot().size();
 			def jsp_preorder;
 			if (n_order>0) {
@@ -2207,11 +2202,27 @@ class VdbenchExplorerGUI {
 				for(opset in ts.findByName("Base").preconf_order_and_plot()) {
 					def str = opset.join(", ");
 					def jb = new JButton(str);
-					jb.addActionListener(new OrderAndPlotPresetButtonListener(ts, opset));
+					jb.addActionListener(new OrderAndPlotPresetButtonListener(ts, opset, this));
 					l.add(jb);					
 				};
 				jsp_preorder = new JScrollPane(l);
 			}
+			
+			frame.setPreferredSize(new Dimension(1024,256));
+			// Resizing is very awkward, this is the best way I could
+			// do it. Took me 3 weeks to figure this out (20091013).
+			def jsp = new JScrollPane(jt2);
+			frame.addComponentListener(new ResizeListener({ 
+				jsp.preferredSize=new Dimension(
+						(int)swing.panel.size.width-margin, 
+						(int)swing.panel.size.height-preset_height-margin);
+				jsp.revalidate();
+				jsp_preorder.preferredSize=new Dimension(
+						(int)swing.panel.size.width-margin,
+						preset_height);
+				jsp_preorder.revalidate();
+				frame.validate();
+			}));
 			
 			swing.panel.removeAll();
 			if (n_order>0) {
