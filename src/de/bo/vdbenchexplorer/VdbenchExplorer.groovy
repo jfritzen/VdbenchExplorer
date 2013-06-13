@@ -824,11 +824,12 @@ class MergedTable extends Table {
 		def c1;
 		def c2;
 		def n;
-		/*		println "this="+this
-		 masterTables.each { 
-		 println "  c="+it.columnCount+" r="+it.rowCount+" m="+it;
-		 }
-		 */		
+		/*
+		println "this="+this
+		masterTables.each { 
+			println "  c="+it.columnCount+" r="+it.rowCount+" m="+it;
+		}
+		*/	
 		c1 = [];
 		n=0;
 		masterTables.each { t ->
@@ -848,6 +849,7 @@ class MergedTable extends Table {
 			c2 = new ConcatColumn("Dataset", "Dataset");
 			c2.columnType = Type.LABEL;
 			masterTables.each { t ->
+				//println shortNames[t.name]+" "+t.rowCount;
 				c2.add(t, new ConstColumn('"'+shortNames[t.name]+'"', t.rowCount));
 			}
 			cols << c2;
@@ -887,41 +889,57 @@ class MergedTable extends Table {
 		return masterTables;
 	}
 	
+	/* Make short unique substrings from otherwise probably long but largely 
+	 * identical file names
+	 */
 	static HashMap makeShortNames(names) {
 		def hm = [:];
 		int mp = 0;
 		int ms = 0;
 		int l;
-		String wp = names[0];
-		String ws = names[0].reverse();
-		if (names.size()==1) {
-			hm[wp] = wp;
-			return hm;
-		} else if (names.size()==0) {
+		//println names;
+		if (names.size()==0) {
 			return hm;
 		}
+		String wp = names[0];
+		if (names.size()==1) {
+			hm[wp] = "~";
+			return hm;
+		} 
+		String ws = names[0].reverse();
 		l = wp.length();
 		ms = l;
 		mp = l;
 		int count=1;
 		int i;
 		def s;
-		while (count<names.size() && !(mp<0 && ms<0)) {
+		//println wp+"<->"+ws;
+		while (count<names.size()) {
 			i = 0;
 			s = names[count];
-			while(i<=mp && s[i]==wp[i]) { i++ };
-			mp = i-1;
+			while(i<mp && i<s.length() && s[i]==wp[i]) { i++ };
+			mp = i;
 			i = 0;
 			s = s.reverse();
-			while(i<=ms && s[i]==ws[i]) { i++ };
-			ms = i-1;
-			//println count+" "+names[count]+" "+mp+" "+ms+" "+names[count].substring(mp+1,names[count].length()-(ms+1));
+			while(i<ms && i<s.length() && s[i]==ws[i]) { i++ };
+			ms = i;
+			//println count+" "+names[count]+" "+mp+" "+ms;
+			//println names[count].substring(0, mp)+" "+wp.substring(0, mp);
+			//println names[count].reverse().substring(0, ms)+" "+ws.substring(0,ms);
 			count++;
 		}
 		names.each {
-			s = it.substring(mp+1,it.length()-(ms+1));
+			if (mp+ms>=it.length()) {
+				s = "";
+			} else {
+				s = it.substring(mp,it.length()-ms);
+			}
+			if (mp>0) { s="~"+s; }
+			if (ms>0) { s=s+"~"; }
+			if (s == "~~") { s="~"; }
 			hm[it] = s;
 		}
+		//println hm;
 		return hm;
 	}
 	
@@ -2747,12 +2765,19 @@ if (new File("tdata").exists()) {
 	assert t2.getValueAt(1,4) == 1;
 	assert t2.getValueAt(5,4) == 9;
 	
-	assert MergedTable.makeShortNames(["Test"]) == ["Test":"Test"];
-	assert MergedTable.makeShortNames(["Test1","Test2"]) == ["Test1":"1", "Test2":"2"];
-	assert MergedTable.makeShortNames(["1Test","2Test"]) == ["1Test":"1", "2Test":"2"];
-	assert MergedTable.makeShortNames(["Waelzer","Walzer"]) == ["Waelzer":"e", "Walzer":""];
-	assert MergedTable.makeShortNames(["Waelzer","Walzer","Wasser"]) == ["Waelzer":"elz", "Walzer":"lz", "Wasser":"ss"];
+	assert MergedTable.makeShortNames(["Test"]) == ["Test":"~"];
+	assert MergedTable.makeShortNames(["Test1","Test2"]) == ["Test1":"~1", "Test2":"~2"];
+	assert MergedTable.makeShortNames(["1Test","2Test"]) == ["1Test":"1~", "2Test":"2~"];
+	assert MergedTable.makeShortNames(["Waelzer","Walzer"]) == ["Waelzer":"~e~", "Walzer":"~"];
+	assert MergedTable.makeShortNames(["Walzer","Waelzer"]) == ["Waelzer":"~e~", "Walzer":"~"];
+	assert MergedTable.makeShortNames(["Waelzer","Walzer","Wasser"]) == ["Waelzer":"~elz~", "Walzer":"~lz~", "Wasser":"~ss~"];
 	assert MergedTable.makeShortNames(["abcde","xyz"]) == ["abcde":"abcde", "xyz":"xyz"];
+	assert MergedTable.makeShortNames(["abcde","abcdefg"]) == ["abcde":"~", "abcdefg":"~fg"];
+	assert MergedTable.makeShortNames(["abcdefg","cdefg"]) == ["cdefg":"~", "abcdefg":"ab~"];
+	assert MergedTable.makeShortNames(["a/b/f","a/f"]) == ["a/b/f":"~b~", "a/f":"~"];
+	assert MergedTable.makeShortNames(["abcde","abcde"]) == ["abcde":"~"];
+	assert MergedTable.makeShortNames(["abcde","abcde","abc"]) == ["abcde":"~de", "abc":"~"];
+	assert MergedTable.makeShortNames(["abc","abcde","abc"]) == ["abcde":"~de", "abc":"~"];	
 	
 	t2=new SimpleTable("Test2", "Test2");
 	t2.add(new SimpleColumn("c1", "c1", Type.INT, (String[])["0","7"]));
@@ -2768,10 +2793,10 @@ if (new File("tdata").exists()) {
 	t3.add(t2);
 	assert t3.rowCount == 8;
 	assert t3.getColumnByName("c1").length() == 8;
-	assert t3.getValueAt(0,0) == '"1"';
-	assert t3.getValueAt(5,0) == '"1"';
-	assert t3.getValueAt(6,0) == '"2"';
-	assert t3.getValueAt(7,0) == '"2"';
+	assert t3.getValueAt(0,0) == '"~1"';
+	assert t3.getValueAt(5,0) == '"~1"';
+	assert t3.getValueAt(6,0) == '"~2"';
+	assert t3.getValueAt(7,0) == '"~2"';
 	assert t3.getValueAt(1,1) == 1;
 	assert t3.getValueAt(3,1) == 2;
 	assert t3.getValueAt(7,1) == 7;
