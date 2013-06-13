@@ -270,9 +270,9 @@ class VdbenchFlatfileTable extends Table {
 	
 	ArrayList preconf_order_and_plot() {
 		return [
-		        	["plot":["bytes/io", "resp"], "group":["threads","Run"]],
-		        	["order":["threads", "rate", "resp"], "plot":["rate", "resp"], "group":["bytes/io", "Run"]],
-		        	["plot":["threads", "MB/sec"], "group":["bytes/io", "Run"]]
+		        	['plot':['bytes/io', 'resp'], 'group':['threads','Run']],
+		        	['order':['threads', 'rate', 'resp'], 'plot':['rate', 'resp'], 'group':['bytes/io', 'Run']],
+		        	['plot':['threads', 'MB/sec'], 'group':['bytes/io', 'Run']]
         ];
 	}
 }
