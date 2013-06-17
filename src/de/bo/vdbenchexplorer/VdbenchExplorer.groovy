@@ -850,7 +850,7 @@ class MergedTable extends Table {
 			c2.columnType = Type.LABEL;
 			masterTables.each { t ->
 				//println shortNames[t.name]+" "+t.rowCount;
-				c2.add(t, new ConstColumn('"'+shortNames[t.name]+'"', t.rowCount));
+				c2.add(t, new ConstColumn(shortNames[t.name], t.rowCount));
 			}
 			cols << c2;
 		}
@@ -2793,10 +2793,10 @@ if (new File("tdata").exists()) {
 	t3.add(t2);
 	assert t3.rowCount == 8;
 	assert t3.getColumnByName("c1").length() == 8;
-	assert t3.getValueAt(0,0) == '"~1"';
-	assert t3.getValueAt(5,0) == '"~1"';
-	assert t3.getValueAt(6,0) == '"~2"';
-	assert t3.getValueAt(7,0) == '"~2"';
+	assert t3.getValueAt(0,0) == '~1';
+	assert t3.getValueAt(5,0) == '~1';
+	assert t3.getValueAt(6,0) == '~2';
+	assert t3.getValueAt(7,0) == '~2';
 	assert t3.getValueAt(1,1) == 1;
 	assert t3.getValueAt(3,1) == 2;
 	assert t3.getValueAt(7,1) == 7;
