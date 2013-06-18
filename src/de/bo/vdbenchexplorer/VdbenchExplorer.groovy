@@ -2158,6 +2158,7 @@ class VdbenchExplorerGUI {
 			openDialog.addChoosableFileFilter(
 				new SimpleFileFilter(it));
 		}
+		openDialog.multiSelectionEnabled=true;
 			
 		exit = swing.action(name:'Exit', closure:{System.exit(0)});
 		addf = swing.action(name:'Add Table', closure:{
@@ -2165,13 +2166,17 @@ class VdbenchExplorerGUI {
 				return;
 			
 			def tm = ts.findByName("Merger");
-			def path = new File(openDialog.selectedFile.path);
 			def file_list = [];
-			if (path.isDirectory()) {
-				file_list = find_files(path, openDialog.fileFilter);
-			} else {
-				file_list << path;
+			openDialog.selectedFiles.each {
+				//println it.toString();
+				if (it.isDirectory()) {
+					file_list << find_files(it, openDialog.fileFilter);
+				} else {
+					file_list << it;
+				}
 			}
+			file_list = file_list.flatten();
+			//println file_list;
 			
 			if (file_list.size()==0) {
 				return;
@@ -2233,14 +2238,18 @@ class VdbenchExplorerGUI {
 			if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
 				return;
 			
-			def path = new File(openDialog.selectedFile.path);
 			def file_list = [];
-			if (path.isDirectory()) {
-				file_list = find_files(path, openDialog.fileFilter);
-			} else {
-				file_list << path;
+			openDialog.selectedFiles.each {
+				//println it;
+				if (it.isDirectory()) {
+					file_list << find_files(it, openDialog.fileFilter);
+				} else {
+					file_list << it;
+				}
 			}
-			
+			file_list=file_list.flatten();
+			//println file_list;
+				
 			if (file_list.size()==0) {
 				return;
 			}
