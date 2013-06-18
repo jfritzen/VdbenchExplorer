@@ -270,9 +270,9 @@ class VdbenchFlatfileTable extends Table {
 	
 	ArrayList preconf_order_and_plot() {
 		return [
-		        	['plot':['bytes/io', 'resp'], 'group':['threads','Run','Dataset'], 'rows':['threads=1']],
-		        	['order':['threads', 'rate', 'resp'], 'plot':['rate', 'resp'], 'group':['bytes/io', 'Run','Dataset'], 'rows':['bytes/io=8192']],
-		        	['plot':['threads', 'MB/sec'], 'group':['bytes/io', 'Run','Dataset'], 'rows':['bytes/io=262144']]
+		        	['plot':['bytes/io', 'resp', 'MB/sec'], 'group':['Dataset'], 'rows':['threads=1','Run=sequential_write_max']],
+		        	['order':['threads', 'rate', 'resp'], 'plot':['rate', 'resp'], 'group':['bytes/io', 'Run','Dataset'], 'rows':['bytes/io=8192','Run=random_read_max']],
+		        	['plot':['threads', 'MB/sec'], 'group':['bytes/io', 'Run','Dataset'], 'rows':['bytes/io=262144','Run=sequential_read_max']],
         ];
 	}
 }
@@ -1841,7 +1841,8 @@ class OrderAndPlotPresetButtonListener implements ActionListener {
 				jt2.moveColumn(opos, npos++);
 			}
 		}
-		// Mark the columns to be grouped by 
+		/* Mark the columns to be grouped by
+		 */
 		hm['group'].each {
 			int col = sorter.findColumn(it);
 			if (col>=0) {
@@ -1860,8 +1861,11 @@ class OrderAndPlotPresetButtonListener implements ActionListener {
 		}
 		/*
 		 * Remove row filters on ordered or plotted columns
+		 * or columns that are going to be row filtered
 		 */
-		(hm['plot']+hm['order']-null).unique().each {
+		(hm['plot']+hm['order']+
+				(hm['rows'].collect {it.replaceAll(/=.*$/,"")})
+				-null).unique().each {
 			int col = sorter.findColumn(it);
 			if (col>=0) {
 				rowfilter.removeColFilters(it);
@@ -2130,7 +2134,7 @@ class VdbenchExplorerGUI {
 	private final int margin = 10;
 	private final int groupbylimit = 100;
 	private final int delay = 500;
-	private final int preset_height = 50;
+	private final int preset_height = 100;
 	
 	private final def swing;
 	private final def exit;
@@ -2275,10 +2279,17 @@ class VdbenchExplorerGUI {
 				def l = Box.createHorizontalBox();
 				l.add(new JLabel("Predefined Plots:"));
 				for(opset in ts.findByName("Base").preconf_order_and_plot()) {
-					def str = opset["plot"].join(", ");
-					if (opset["group"]) { 
-						str += " grp:"+opset["group"].join("/");
+					def str = "<html>";
+					str += opset['plot'].join(", ");
+					if (opset['group']) {
+						str += "<br/>groupby: "
+						str += opset['group'].join("/");
 					}
+					if (opset['rows']) {
+						str += "<br/>rows: ";
+						str += opset['rows'].join(", ");
+					}
+					str += "</html>"
 					def jb = new JButton(str);
 					jb.addActionListener(new OrderAndPlotPresetButtonListener(ts, opset, this));
 					l.add(jb);					
@@ -2286,7 +2297,7 @@ class VdbenchExplorerGUI {
 				jsp_preorder = new JScrollPane(l);
 			}
 			
-			frame.setPreferredSize(new Dimension(1024,256));
+			frame.setPreferredSize(new Dimension(1024,384));
 			// Resizing is very awkward, this is the best way I could
 			// do it. Took me 3 weeks to figure this out (20091013).
 			def jsp = new JScrollPane(jt2);
