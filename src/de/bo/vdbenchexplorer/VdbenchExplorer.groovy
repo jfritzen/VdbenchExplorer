@@ -228,10 +228,10 @@ class SortedUniqueTable extends Table {
 class VdbenchFlatfileTable extends Table {
 	def h=[:], heads;
 	
-	VdbenchFlatfileTable(String file) {
-		super(file, file);
+	VdbenchFlatfileTable(File file) {
+		super(file.toString(), file.toString());
 		Matcher m;
-		String[] ls = new File(file).readLines();
+		String[] ls = file.readLines();
 		def t=this;
 		ls.each {
 			m = (it =~ /^\* (\S+) *: (.*)$/);
@@ -776,7 +776,6 @@ class ColumnFilteredTable extends Table {
 	}
 	
 	// Own methods
-	
 	void addSyntheticColumn(String expr) {
 		addSyntheticColumn(columnsFromExpression(expr), expr);
 	}
@@ -2041,9 +2040,9 @@ class JTable2 extends JTable {
 class SimpleFileFilter extends javax.swing.filechooser.FileFilter {
 	private String classFilter;
 	private static supported_list = [
-	"ASCII table":AsciiFileTable.class,
-	"SAR output":SarOutputTable.class,
-	"Vdbench flatfile":VdbenchFlatfileTable.class,
+	                                 "ASCII table":AsciiFileTable.class,
+	                                 "SAR output":SarOutputTable.class,
+	                                 "Vdbench flatfile":VdbenchFlatfileTable.class,
 	];
 	
 	SimpleFileFilter(String cl) {
@@ -2154,7 +2153,7 @@ class VdbenchExplorerGUI {
 		openDialog  = swing.fileChooser(
 				dialogTitle:"Choose a table file", 
 				id:"openDialog", acceptAllFileFilterUsed:false,
-				fileSelectionMode: JFileChooser.FILES_ONLY) {};                
+				fileSelectionMode: JFileChooser.FILES_AND_DIRECTORIES) {};                
 		SimpleFileFilter.supported().each { 
 			openDialog.addChoosableFileFilter(
 				new SimpleFileFilter(it));
@@ -2165,19 +2164,33 @@ class VdbenchExplorerGUI {
 			if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
 				return;
 			
-			def file = openDialog.selectedFile.path;
-			def t1 = openDialog.fileFilter.tableClass.newInstance(file);
+			def tm = ts.findByName("Merger");
+			def path = new File(openDialog.selectedFile.path);
+			def file_list = [];
+			if (path.isDirectory()) {
+				file_list = find_files(path, openDialog.fileFilter);
+			} else {
+				file_list << path;
+			}
 			
-			def t = ts.findByName("Merger");
-			t.add(t1);
-			ts.updateUpwardsFrom(t);
+			if (file_list.size()==0) {
+				return;
+			}
+			
+			file_list.each {
+				def ta = openDialog.fileFilter.tableClass.newInstance(it);
+				tm.add(ta);				
+			}			
+
+			ts.updateUpwardsFrom(tm);
+
 			/* Hack: currently, with fireTableStructureChanged()
 			 * we lose the column order. So we only fire the event
 			 * when absolutely necessary, i.e. when we add the  
 			 * Dataset column, i.e. when we add the second
 			 * table.
 			 */	            
-			def tl = t.listTables();
+			def tl = tm.listTables();
 			if (tl.size()==2) {
 				jt2.model.fireTableStructureChanged();
 			} else {
@@ -2220,11 +2233,31 @@ class VdbenchExplorerGUI {
 			if (openDialog.showOpenDialog() != JFileChooser.APPROVE_OPTION) 
 				return;
 			
-			def file = openDialog.selectedFile.path;
+			def path = new File(openDialog.selectedFile.path);
+			def file_list = [];
+			if (path.isDirectory()) {
+				file_list = find_files(path, openDialog.fileFilter);
+			} else {
+				file_list << path;
+			}
+			
+			if (file_list.size()==0) {
+				return;
+			}
+			
+			def file = file_list.pop();
 			def t1 = openDialog.fileFilter.tableClass.newInstance(file);
 			
 			ts.add(t1, "Base");
 			ts.add(MergedTable.class, "Merger");
+			def tm = ts.findByName("Merger");
+
+			file_list.each {
+				def ta = openDialog.fileFilter.tableClass.newInstance(it);
+				tm.add(ta);				
+			}			
+			ts.updateUpwardsFrom(tm);
+			
 			ts.add(ColumnFilteredTable.class, "Synthetic");
 			ts.findByName("Synthetic").
 					removeColumnsByNames(ts.findByName("Base").boringColumns());
@@ -2622,6 +2655,21 @@ $Revision$
 	TableStack getTableStack() {
 		return ts;
 	}
+	
+	private ArrayList find_files(File path, SimpleFileFilter sff) {
+		def fl = [];
+		File[] files = path.listFiles();
+		for(File f : files) {
+			if (f.isFile() && sff.accept(f)) {
+				//println "+ "+f.toString();
+				fl << f;
+			} else if (f.isDirectory()) {
+				fl << find_files(f, sff)
+			}
+		}
+		//if (fl.flatten().size()>0) { println "= "+fl.flatten().collect {it.toString()}; }
+		return fl.flatten();
+	}
 
 }
 
@@ -2633,7 +2681,7 @@ if (new File("tdata").exists()) {
 	assert Column.guessType((String[])["09:01:02", "23:57:58"]) == Type.TIME;
 	assert Column.guessType((String[])["09:01:02.123", "23:57:58.987"]) == Type.TIME;
 	
-	v = new VdbenchFlatfileTable("tdata/VdbenchFlatfile.html");
+	v = new VdbenchFlatfileTable(new File("tdata/VdbenchFlatfile.html"));
 	
 	assert v.getColumn(0).columnHead.name == "tod";
 	assert v.getColumn(1).columnHead.name == "Run";
