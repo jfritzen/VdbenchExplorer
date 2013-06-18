@@ -270,9 +270,9 @@ class VdbenchFlatfileTable extends Table {
 	
 	ArrayList preconf_order_and_plot() {
 		return [
-		        	['plot':['bytes/io', 'resp'], 'group':['threads','Run']],
-		        	['order':['threads', 'rate', 'resp'], 'plot':['rate', 'resp'], 'group':['bytes/io', 'Run']],
-		        	['plot':['threads', 'MB/sec'], 'group':['bytes/io', 'Run']]
+		        	['plot':['bytes/io', 'resp'], 'group':['threads','Run','Dataset'], 'rows':['threads=1']],
+		        	['order':['threads', 'rate', 'resp'], 'plot':['rate', 'resp'], 'group':['bytes/io', 'Run','Dataset'], 'rows':['bytes/io=8192']],
+		        	['plot':['threads', 'MB/sec'], 'group':['bytes/io', 'Run','Dataset'], 'rows':['bytes/io=262144']]
         ];
 	}
 }
@@ -626,11 +626,14 @@ class RowFilteredTable extends Table {
 			def val = masterTable.getColumnByName(cname).getRow(row).val;
 			boolean ret=vals.grep(val);
 			ret=inverse?!ret:ret;
-			//println "row="+row+" val="+val+" ret="+ret+" vals="+vals;
+			//println "cname="+cname+" row="+row+" val="+val+" ret="+ret;
 			return ret;
 		};
 		closures << c;
 		descriptions[c] = cname.substring(0,Math.min(3,cname.size()))+(inverse?"=":"!=")+vals.join(",");
+		if (!filters[cname]) { 
+			filters[cname] = [];
+		}
 		filters[cname] << c;
 		getColumnByName(cname).filtered = true;
 		return;
@@ -641,11 +644,14 @@ class RowFilteredTable extends Table {
 			boolean ret = 
 					(masterTable.getColumnByName(cname).getRow(row).val == val);
 			ret=inverse?!ret:ret;
-			//println "row="+row+" val="+val+" ret="+ret;
+			//println "cname="+cname+" row="+row+" val="+val+" ret="+ret;
 			return ret;
 		};
 		closures << c
 		descriptions[c] = cname.substring(0,Math.min(3,cname.size()))+(inverse?"=":"!=")+val;
+		if (!filters[cname]) { 
+			filters[cname] = [];
+		}
 		filters[cname] << c;
 		getColumnByName(cname).filtered = true;
 		return;
@@ -654,7 +660,6 @@ class RowFilteredTable extends Table {
 	void removeAllFilters() {
 		closures = [];
 		descriptions = [:];
-		cols.each { it.filter = [] };
 		filters = [:];
 		cols.each { it.filtered = false }
 	}
@@ -1816,8 +1821,9 @@ class OrderAndPlotPresetButtonListener implements ActionListener {
 		this.gui = gui;
 	}
 	
-	void actionPerformed(ActionEvent e) {
-		Table sorter = ts.findByName("Sorter");
+	synchronized void actionPerformed(ActionEvent e) {
+		Table sorter = ts.findByName('Sorter');
+		Table rowfilter = ts.findByName('RowFilter');
 		JTable2 jt2 = sorter.jt2;
 		// Unset plotted and groupby for all columns
 		for(int i=0; i<jt2.model.columnCount; i++) {
@@ -1828,24 +1834,55 @@ class OrderAndPlotPresetButtonListener implements ActionListener {
 		 * existing, according to the "plot" array.
 		 */		
 		int npos = 0;
-		(hm["order"]?hm["order"]:hm["plot"]).each {
+		(hm['order']?hm['order']:hm['plot']).each {
 			int col = sorter.findColumn(it);
-			def opos = jt2.convertColumnIndexToView(col);
-			jt2.moveColumn(opos, npos++);
+			if (col>=0) {
+				def opos = jt2.convertColumnIndexToView(col);
+				jt2.moveColumn(opos, npos++);
+			}
 		}
 		// Mark the columns to be grouped by 
-		hm["group"].each {
+		hm['group'].each {
 			int col = sorter.findColumn(it);
-			jt2.model.getColumn(col).groupby=true;
+			if (col>=0) {
+				jt2.model.getColumn(col).groupby=true;
+			}
 		}
 		/* Mark the columns to be plotted and make sure they are
 		 * not grouped by.
 		 */
-		hm["plot"].each {
+		hm['plot'].each {
 			int col = sorter.findColumn(it);
-			jt2.model.getColumn(col).plotted=true;
-			jt2.model.getColumn(col).groupby=false;
+			if (col>=0) {
+				jt2.model.getColumn(col).plotted=true;
+				jt2.model.getColumn(col).groupby=false;
+			}
 		}
+		/*
+		 * Remove row filters on ordered or plotted columns
+		 */
+		(hm['plot']+hm['order']-null).unique().each {
+			int col = sorter.findColumn(it);
+			if (col>=0) {
+				rowfilter.removeColFilters(it);
+			}
+		}
+		/* Preconfigured row filters
+		 */
+		hm['rows'].each {
+			def matches = (it =~ /^(\S+)=(\S+)$/);
+			if (matches) {
+				def cname = matches[0][1];
+				def val = matches[0][2];
+				//println cname+" "+val;
+				int col = sorter.findColumn(cname);
+				if (col >= 0) {
+					rowfilter.addFilter(cname, val, true);
+				}
+			}
+		}
+		ts.updateUpwardsFrom(rowfilter);
+		jt2.model.fireTableDataChanged();
 		gui.updatePlots();
 		jt2.tableHeader.repaint();			
 	}
