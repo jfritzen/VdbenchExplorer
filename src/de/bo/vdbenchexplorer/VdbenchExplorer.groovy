@@ -271,8 +271,8 @@ class VdbenchFlatfileTable extends Table {
 	ArrayList preconf_order_and_plot() {
 		return [
 		        	['plot':['bytes/io', 'resp', 'MB/sec'], 'group':['Dataset'], 'rows':['threads=1','Run=sequential_write_max']],
-		        	['order':['threads', 'rate', 'resp'], 'plot':['rate', 'resp'], 'group':['bytes/io', 'Run','Dataset'], 'rows':['bytes/io=8192','Run=random_read_max']],
-		        	['plot':['threads', 'MB/sec'], 'group':['bytes/io', 'Run','Dataset'], 'rows':['bytes/io=262144','Run=sequential_read_max']],
+		        	['order':['threads', 'rate', 'resp'], 'plot':['rate', 'resp'], 'group':['bytes/io','Dataset'], 'rows':['bytes/io=8192','Run=random_read_max']],
+		        	['plot':['threads', 'MB/sec'], 'group':['bytes/io','Dataset'], 'rows':['bytes/io=262144','Run=sequential_read_max']],
         ];
 	}
 }
