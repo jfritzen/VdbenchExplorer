@@ -1504,6 +1504,9 @@ class Plot {
 	Dimension box;
 	private VdbenchExplorerGUI vegui = null;
 	private fixed = false;
+	private show_line = true;
+	private double line_x0, line_y0, line_x1, line_y1;
+	private double[] x, y;
 	
 	private final def swing;
 	private final def saveDialog;
@@ -1527,18 +1530,21 @@ class Plot {
 	
 	Plot(Column c1, Column c2, VdbenchExplorerGUI vegui, Column[] g) {
 		this();
-		assert c1.length() == c2.length();
-		this.cx = c1;
-		this.cy = c2;
 		this.vegui = vegui;
 		this.groupby = g;
-		init();
+		reinit(c1, c2);
 	}	
 	
 	void reinit(Column c1, Column c2) {
 		assert c1.length() == c2.length();
 		this.cx = c1;
 		this.cy = c2;
+		x = cx.getDoubles();
+		y = cy.getDoubles();
+		this.line_x0 = x.toList().min();
+		this.line_y0 = y.toList().min();
+		this.line_x1 = x.toList().max();
+		this.line_y1 = y.toList().max();
 		init();
 	}
 	
@@ -1557,10 +1563,6 @@ class Plot {
 	}
 	
 	private void init() {
-		//println "px="+cx.columnHead.name+" py="+cy.columnHead.name;
-		double[] x = cx.getDoubles();
-		double[] y = cy.getDoubles();
-
 		if (x == null || x == [] || y == null || y == []) {
 			kill();
 			return;
@@ -1579,7 +1581,6 @@ class Plot {
 		} else {
 			gs.backgroundColor=java.awt.Color.WHITE; 			
 		}
-		
 		
 		GraphLabel l=new GraphLabel(GraphLabel.XLABEL, 
 				cx.columnHead.description);
@@ -1690,14 +1691,57 @@ class Plot {
 			da << ds;
 		}
 		
-		Vector v = new Vector();
-		da.each { it -> v.add(it) };
-		
 		if (!box) {
 			box = new Dimension(400,300);
 		} else {
 			box = p.getSize();
 		}	
+		gs.panelSize=box;
+
+		if (show_line) {
+			def slope;
+			if (line_x1-line_x0==0.0f) {
+				slope="inf";
+			} else {
+				slope=sprintf("%10.6g", ((line_y1-line_y0)/(line_x1-line_x0)));
+			}
+			
+			/* Apparently there is no way to set the position of a 
+			 * a random GraphLabel in pixel coordinates? For data coordinats
+			 * there is the GraphLabel.DATA constant, but the OTHER constant
+			 * does not evaluate the location at all. Using DATA and setLocation()
+			 * together leads to unexpected results.
+			 */
+			
+			GraphLabel gl;
+			def dx=line_x1-line_x0;
+			def dy=line_y1-line_y0;
+			gl = new GraphLabel(GraphLabel.DATA, "dx="+sprintf("%10.6g", dx));
+			gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.1f*dy);
+			gs.addLabel(gl);
+			
+			gl = new GraphLabel(GraphLabel.DATA, "dy="+sprintf("%10.6g", dy));
+			gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.2f*dy);
+			gs.addLabel(gl);
+			
+			gl = new GraphLabel(GraphLabel.DATA, "slope="+slope);
+			gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.3f*dy);
+			gs.addLabel(gl);
+			
+			DataArray ds = new DataArray();
+			ds.addPoint(line_x0, line_y0);
+			ds.addPoint(line_x1, line_y1);
+			ds.drawSymbol=true;
+			ds.symbol=5;
+			ds.drawLegend=false;
+			ds.dashLength=0.5f;
+			ds.color=java.awt.Color.BLACK;
+			da << ds;
+		}
+		
+		Vector v = new Vector();
+		da.each { it -> v.add(it) };
+		
 		graph = new Graph_2D(gs);
 		graph.show(v);
 		def filterDescription = vegui.getTableStack().findByName("RowFilter").currentFilterDescription();
