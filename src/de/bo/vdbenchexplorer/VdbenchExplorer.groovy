@@ -1503,6 +1503,7 @@ class Plot {
 	GraphSettings gs;
 	Dimension box;
 	private VdbenchExplorerGUI vegui = null;
+	private fixed = false;
 	
 	private final def swing;
 	private final def saveDialog;
@@ -1573,6 +1574,12 @@ class Plot {
 		gs.setMaxValue(GraphSettings.X_AXIS, x.toList().max());
 		gs.setMinValue(GraphSettings.Y_AXIS, y.toList().min());
 		gs.setMaxValue(GraphSettings.Y_AXIS, y.toList().max());
+		if (fixed) { 
+			gs.backgroundColor=java.awt.Color.LIGHT_GRAY; 
+		} else {
+			gs.backgroundColor=java.awt.Color.WHITE; 			
+		}
+		
 		
 		GraphLabel l=new GraphLabel(GraphLabel.XLABEL, 
 				cx.columnHead.description);
@@ -1615,7 +1622,7 @@ class Plot {
 				cx.columnHead.name+" - "+cy.columnHead.name;
 		plotFrame.addWindowListener(new WindowAdapter2({
 			kill();
-			cy.plotted=false;
+			if (!fixed) { cy.plotted=false; }
 			vegui.updatePlots();
 			vegui.repaintTableHeader();
 		}));
@@ -1706,6 +1713,13 @@ class Plot {
 						return;
 					}			
 					ImageIO.write(pic, "png", new File(saveDialog.selectedFile.path));
+				})
+			}
+			menuItem() {
+				action(name:"Fix plot", closure: {
+					vegui.fix_plot(this);
+					fixed = true;
+					redraw();
 				})
 			}
 		};	
@@ -2548,6 +2562,13 @@ $Revision$
 				});
 			}
 		};		
+	}
+	
+	synchronized void fix_plot(Plot p) {
+		plots = plots - p;
+		fixedplots << p;
+		fixedplots = (fixedplots + p).unique();
+		updatePlots();
 	}
 	
 	synchronized void updatePlots() {
