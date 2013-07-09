@@ -1579,7 +1579,7 @@ class Plot {
 		 */  
 		def axis = gs.panelSize.height-graph.topMargin-graph.bottomMargin;
 		def diff = gs.getMaxValue(GraphSettings.Y_AXIS)-gs.getMinValue(GraphSettings.Y_AXIS);
-		println "h="+gs.panelSize.height+" axis="+axis+" diff="+diff+" tM="+graph.topMargin+" bM="+graph.bottomMargin;
+		//println "h="+gs.panelSize.height+" axis="+axis+" diff="+diff+" tM="+graph.topMargin+" bM="+graph.bottomMargin;
 		return (axis-(pixelY-graph.topMargin))*diff/axis;		
 	}
 	
