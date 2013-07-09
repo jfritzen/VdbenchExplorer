@@ -1579,8 +1579,8 @@ class Plot {
 		 */  
 		def axis = gs.panelSize.height-graph.topMargin-graph.bottomMargin;
 		def diff = gs.getMaxValue(GraphSettings.Y_AXIS)-gs.getMinValue(GraphSettings.Y_AXIS);
-		//println "h="+gs.panelSize.height+" axis="+axis+" diff="+diff+" tM="+graph.topMargin+" bM="+graph.bottomMargin;
-		return (gs.panelSize.height-pixelY-graph.topMargin)*diff/axis;		
+		println "h="+gs.panelSize.height+" axis="+axis+" diff="+diff+" tM="+graph.topMargin+" bM="+graph.bottomMargin;
+		return (axis-(pixelY-graph.topMargin))*diff/axis;		
 	}
 	
 	private DataArray create_line() {
@@ -1801,28 +1801,27 @@ class Plot {
 		}));
 		PlotMouseInputAdapter pmia = new PlotMouseInputAdapter(
 			{
-				println "p"+it;
+				//println "p"+it;
 				show_line = false;
-				def yh=(it.getLocationOnScreen().y+it.y)/2;
-				line_x0 = toDataX(it.getLocationOnScreen().x);
-				line_y0 = toDataY(yh);
-				println "("+it.getLocationOnScreen().x+","+yh+")"+"->("+line_x0+","+line_y0+")";
+				line_x0 = toDataX(it.x);
+				line_y0 = toDataY(it.y);
+				//println "("+it.x+","+it.y+")"+"->("+line_x0+","+line_y0+")";
+				//println graph.toX(line_x0)+" "+graph.toY(line_y0);
 			},
 			{
-				println "d"+it;
+				//println "d"+it;
 				show_line = true;
-				def yh=(it.getLocationOnScreen().y+it.y)/2;
-				line_x1 = toDataX(it.x);
-				line_y1 = toDataY(yh);
+				/* line_x1 = toDataX(it.x);
+				line_y1 = toDataY(it.y);
 				println "("+line_x1+","+line_y1+")";
-				//redraw();
+				redraw();
+				*/
 			},
 			{
-				println "r"+it;
-				def yh=(it.getLocationOnScreen().y+it.y)/2;
+				//println "r"+it;
 				line_x1 = toDataX(it.x);
-				line_y1 = toDataY(yh);
-				println "("+it.getLocationOnScreen().x+","+yh+")"+"->("+line_x1+","+line_y1+")";
+				line_y1 = toDataY(it.y);
+				//println "("+it.x+","+it.y+")"+"->("+line_x1+","+line_y1+")";
 				redraw();
 			}
 		);
