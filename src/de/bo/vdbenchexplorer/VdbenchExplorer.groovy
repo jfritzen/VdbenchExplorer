@@ -25,6 +25,7 @@ import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
+import javax.swing.event.MouseInputAdapter
 import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
 import javax.swing.event.TableModelEvent;
@@ -1562,6 +1563,69 @@ class Plot {
 		init();
 	}
 	
+	private double toDataX(double pixelX) {
+		/* graph.*Margin are different from gs.*Margin because they already 
+		 * contain the distance to the axis. 
+		 */  
+		def axis = gs.panelSize.width-graph.leftMargin-graph.rightMargin;
+		def diff = gs.getMaxValue(GraphSettings.X_AXIS)-gs.getMinValue(GraphSettings.X_AXIS);
+		//println "w="+gs.panelSize.width+" axis="+axis+" diff="+diff+" lM="+graph.leftMargin+" rM="+graph.rightMargin;
+		return (pixelX-graph.leftMargin)*diff/axis;
+	}
+	
+	private double toDataY(double pixelY) {
+		/* graph.*Margin are different from gs.*Margin because they already 
+		 * contain the distance to the axis. 
+		 */  
+		def axis = gs.panelSize.height-graph.topMargin-graph.bottomMargin;
+		def diff = gs.getMaxValue(GraphSettings.Y_AXIS)-gs.getMinValue(GraphSettings.Y_AXIS);
+		//println "h="+gs.panelSize.height+" axis="+axis+" diff="+diff+" tM="+graph.topMargin+" bM="+graph.bottomMargin;
+		return (gs.panelSize.height-pixelY-graph.topMargin)*diff/axis;		
+	}
+	
+	private DataArray create_line() {
+		def slope;
+		if (line_x1-line_x0==0.0f) {
+			slope="inf";
+		} else {
+			slope=sprintf("%10.6g", ((line_y1-line_y0)/(line_x1-line_x0)));
+		}
+		
+		/* Apparently there is no way to set the position of a 
+		 * a random GraphLabel in pixel coordinates? For data coordinats
+		 * there is the GraphLabel.DATA constant, but the OTHER constant
+		 * does not evaluate the location at all. Using DATA and setLocation()
+		 * together leads to unexpected results.
+		 */
+		
+		GraphLabel gl;
+		def dx=line_x1-line_x0;
+		def dy=line_y1-line_y0;
+		def dy2=y.toList().max()-y.toList().min();
+		gl = new GraphLabel(GraphLabel.DATA, "dx="+sprintf("%10.6g", dx));
+		gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.1f*dy2);
+		gs.addLabel(gl);
+		
+		gl = new GraphLabel(GraphLabel.DATA, "dy="+sprintf("%10.6g", dy));
+		gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.2f*dy2);
+		gs.addLabel(gl);
+		
+		gl = new GraphLabel(GraphLabel.DATA, "slope="+slope);
+		gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.3f*dy2);
+		gs.addLabel(gl);
+		
+		DataArray ds = new DataArray();
+		ds.addPoint(line_x0, line_y0);
+		ds.addPoint(line_x1, line_y1);
+		ds.drawSymbol=true;
+		ds.symbol=5;
+		ds.drawLegend=false;
+		ds.dashLength=0.5f;
+		ds.color=java.awt.Color.BLACK;
+		
+		return ds;
+	}
+	
 	private void init() {
 		if (x == null || x == [] || y == null || y == []) {
 			kill();
@@ -1691,6 +1755,11 @@ class Plot {
 			da << ds;
 		}
 		
+		if (show_line) {
+			def ds = create_line();
+			da << ds;
+		}
+		
 		if (!box) {
 			box = new Dimension(400,300);
 		} else {
@@ -1698,47 +1767,6 @@ class Plot {
 		}	
 		gs.panelSize=box;
 
-		if (show_line) {
-			def slope;
-			if (line_x1-line_x0==0.0f) {
-				slope="inf";
-			} else {
-				slope=sprintf("%10.6g", ((line_y1-line_y0)/(line_x1-line_x0)));
-			}
-			
-			/* Apparently there is no way to set the position of a 
-			 * a random GraphLabel in pixel coordinates? For data coordinats
-			 * there is the GraphLabel.DATA constant, but the OTHER constant
-			 * does not evaluate the location at all. Using DATA and setLocation()
-			 * together leads to unexpected results.
-			 */
-			
-			GraphLabel gl;
-			def dx=line_x1-line_x0;
-			def dy=line_y1-line_y0;
-			gl = new GraphLabel(GraphLabel.DATA, "dx="+sprintf("%10.6g", dx));
-			gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.1f*dy);
-			gs.addLabel(gl);
-			
-			gl = new GraphLabel(GraphLabel.DATA, "dy="+sprintf("%10.6g", dy));
-			gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.2f*dy);
-			gs.addLabel(gl);
-			
-			gl = new GraphLabel(GraphLabel.DATA, "slope="+slope);
-			gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.3f*dy);
-			gs.addLabel(gl);
-			
-			DataArray ds = new DataArray();
-			ds.addPoint(line_x0, line_y0);
-			ds.addPoint(line_x1, line_y1);
-			ds.drawSymbol=true;
-			ds.symbol=5;
-			ds.drawLegend=false;
-			ds.dashLength=0.5f;
-			ds.color=java.awt.Color.BLACK;
-			da << ds;
-		}
-		
 		Vector v = new Vector();
 		da.each { it -> v.add(it) };
 		
@@ -1771,7 +1799,35 @@ class Plot {
 		graph.addMouseListener(new PopupListener({
 			popup.show(it.getComponent(), it.getX(), it.getY());
 		}));
-
+		PlotMouseInputAdapter pmia = new PlotMouseInputAdapter(
+			{
+				println "p"+it;
+				show_line = false;
+				def yh=(it.getLocationOnScreen().y+it.y)/2;
+				line_x0 = toDataX(it.getLocationOnScreen().x);
+				line_y0 = toDataY(yh);
+				println "("+it.getLocationOnScreen().x+","+yh+")"+"->("+line_x0+","+line_y0+")";
+			},
+			{
+				println "d"+it;
+				show_line = true;
+				def yh=(it.getLocationOnScreen().y+it.y)/2;
+				line_x1 = toDataX(it.x);
+				line_y1 = toDataY(yh);
+				println "("+line_x1+","+line_y1+")";
+				//redraw();
+			},
+			{
+				println "r"+it;
+				def yh=(it.getLocationOnScreen().y+it.y)/2;
+				line_x1 = toDataX(it.x);
+				line_y1 = toDataY(yh);
+				println "("+it.getLocationOnScreen().x+","+yh+")"+"->("+line_x1+","+line_y1+")";
+				redraw();
+			}
+		);
+		graph.addMouseListener(pmia);
+		graph.addMouseMotionListener(pmia);
 		p.setPreferredSize(box);
 		p.add(graph,BorderLayout.CENTER);
 		plotFrame.pack();
@@ -1843,6 +1899,30 @@ class PopupListener extends MouseAdapter {
 			closure(e);
 		}
 	}
+}
+
+class PlotMouseInputAdapter extends MouseInputAdapter {
+	Closure cp, cd, cr;
+	
+	PlotMouseInputAdapter(Closure cp, Closure cd, Closure cr) {
+		this.cp = cp;
+		this.cd = cd;
+		this.cr = cr;
+	}
+	
+	public void mousePressed(MouseEvent me) {
+		cp(me);
+	}
+	
+	public void mouseDragged(MouseEvent me) {
+		cd(me);
+	}
+	
+	public void mouseReleased(MouseEvent me) {
+		cr(me);
+	}
+	
+	
 }
 
 class TCMListener implements TableColumnModelListener {
@@ -2445,7 +2525,7 @@ class VdbenchExplorerGUI {
 		about = swing.action(name:'About', closure:{
 			JOptionPane.showMessageDialog(frame, '''
 (c) $Date$ Baltic Online Computer GmbH 
-By:  Jochen Fritzenk√∂tter
+By:  Jochen Fritzenkötter
 $URL$
 $Revision$
 						''', "About", 
