@@ -1570,7 +1570,7 @@ class Plot {
 		def axis = gs.panelSize.width-graph.leftMargin-graph.rightMargin;
 		def diff = gs.getMaxValue(GraphSettings.X_AXIS)-gs.getMinValue(GraphSettings.X_AXIS);
 		//println "w="+gs.panelSize.width+" axis="+axis+" diff="+diff+" lM="+graph.leftMargin+" rM="+graph.rightMargin;
-		return (pixelX-graph.leftMargin)*diff/axis;
+		return (pixelX-graph.leftMargin)*diff/axis+gs.getMinValue(GraphSettings.X_AXIS);
 	}
 	
 	private double toDataY(double pixelY) {
@@ -1580,7 +1580,7 @@ class Plot {
 		def axis = gs.panelSize.height-graph.topMargin-graph.bottomMargin;
 		def diff = gs.getMaxValue(GraphSettings.Y_AXIS)-gs.getMinValue(GraphSettings.Y_AXIS);
 		//println "h="+gs.panelSize.height+" axis="+axis+" diff="+diff+" tM="+graph.topMargin+" bM="+graph.bottomMargin;
-		return (axis-(pixelY-graph.topMargin))*diff/axis;		
+		return (axis-(pixelY-graph.topMargin))*diff/axis+gs.getMinValue(GraphSettings.Y_AXIS);		
 	}
 	
 	private DataArray create_line() {
