@@ -1487,6 +1487,26 @@ class Cell {
 /* The graphics
  */
 
+class Graph_2Dx extends Graph_2D {
+	public Graph_2Dx(GraphSettings gs) {
+		super(gs);
+	}
+	
+	public boolean pointOccupiedByLegendOrLabel(double x, double y) {
+		def xx = gs.getLegendPosition(X);
+		def yy = gs.getLegendPosition(Y);
+		//println xx+" "+yy+" "+legendWidth+" "+legendHeight+" "+x+" "+y;
+		if (gs.drawLegend() && x>xx && y>yy && 
+				x < xx+legendWidth && y < yy+legendHeight) {
+			//println true;
+			return true;
+		}
+		//println false;
+		return false;
+	}
+	
+}
+
 class Plot {
 	JFrame plotFrame;
 	JPanel p;
@@ -1500,12 +1520,13 @@ class Plot {
 	 */
 	Column[] groupby = null;
 	String description = null;
-	Graph_2D graph;
+	Graph_2Dx graph;
 	GraphSettings gs;
 	Dimension box;
 	private VdbenchExplorerGUI vegui = null;
 	private fixed = false;
 	private show_line = true;
+	private occ_space = false;
 	private double line_x0, line_y0, line_x1, line_y1;
 	private double[] x, y;
 	
@@ -1634,8 +1655,18 @@ class Plot {
 		
 		p.removeAll();
 		
-		//GraphSettings gs = new GraphSettings();
-		gs.reset();
+		// GraphSettings gs = new GraphSettings();
+		// Save legend position and then reset settings.
+		if (gs.useLegendPosition()) {
+			def xleg=gs.getLegendPosition(0);
+			def yleg=gs.getLegendPosition(1);
+			gs.reset();
+			gs.setLegendPosition(0, xleg);
+			gs.setLegendPosition(1, yleg);
+			gs.setUseLegendPosition(true);
+		} else {
+			gs.reset();
+		}
 		gs.setMinValue(GraphSettings.X_AXIS, x.toList().min());
 		gs.setMaxValue(GraphSettings.X_AXIS, x.toList().max());
 		gs.setMinValue(GraphSettings.Y_AXIS, y.toList().min());
@@ -1770,7 +1801,7 @@ class Plot {
 		Vector v = new Vector();
 		da.each { it -> v.add(it) };
 		
-		graph = new Graph_2D(gs);
+		graph = new Graph_2Dx(gs);
 		graph.show(v);
 		def filterDescription = vegui.getTableStack().findByName("RowFilter").currentFilterDescription();
 		
@@ -1802,15 +1833,23 @@ class Plot {
 		PlotMouseInputAdapter pmia = new PlotMouseInputAdapter(
 			{
 				//println "p"+it;
-				show_line = false;
-				line_x0 = toDataX(it.x);
-				line_y0 = toDataY(it.y);
+				if (graph.pointOccupiedByLegendOrLabel((double)it.x, 
+						(double)it.y)) { 
+					occ_space = true;
+				} else {
+					occ_space = false;
+					show_line = false;
+					line_x0 = toDataX(it.x);
+					line_y0 = toDataY(it.y);
+				}
 				//println "("+it.x+","+it.y+")"+"->("+line_x0+","+line_y0+")";
 				//println graph.toX(line_x0)+" "+graph.toY(line_y0);
 			},
 			{
 				//println "d"+it;
-				show_line = true;
+				if (!occ_space) {
+					show_line = true;
+				}
 				/* line_x1 = toDataX(it.x);
 				line_y1 = toDataY(it.y);
 				println "("+line_x1+","+line_y1+")";
@@ -1819,10 +1858,12 @@ class Plot {
 			},
 			{
 				//println "r"+it;
-				line_x1 = toDataX(it.x);
-				line_y1 = toDataY(it.y);
-				//println "("+it.x+","+it.y+")"+"->("+line_x1+","+line_y1+")";
-				redraw();
+				if (show_line && !occ_space) {
+					line_x1 = toDataX(it.x);
+					line_y1 = toDataY(it.y);
+					//println "("+it.x+","+it.y+")"+"->("+line_x1+","+line_y1+")";
+					redraw();
+				}
 			}
 		);
 		graph.addMouseListener(pmia);
