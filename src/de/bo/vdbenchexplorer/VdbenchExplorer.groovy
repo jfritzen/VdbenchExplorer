@@ -1630,18 +1630,27 @@ class Plot {
 		def dx=line_x1-line_x0;
 		def dy=line_y1-line_y0;
 		def dy2=y.toList().max()-y.toList().min();
+		def xp=x.toList().max()*0.9f;
+		def yp=y.toList().min();
 		gl = new GraphLabel(GraphLabel.DATA, "dx="+sprintf("%10.6g", dx));
-		gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.1f*dy2);
+		gl.setDataLocation(xp, yp+0.1f*dy2);
 		gs.addLabel(gl);
 		
 		gl = new GraphLabel(GraphLabel.DATA, "dy="+sprintf("%10.6g", dy));
-		gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.2f*dy2);
+		gl.setDataLocation(xp, yp+0.2f*dy2);
 		gs.addLabel(gl);
 		
 		gl = new GraphLabel(GraphLabel.DATA, "slope="+slope);
-		gl.setDataLocation(x.toList().max()*0.9f, y.toList().min()+0.3f*dy2);
+		gl.setDataLocation(xp, yp+0.3f*dy2);
 		gs.addLabel(gl);
 		
+		gl = new GraphLabel(GraphLabel.DATA, 
+				sprintf("(%6.3g,%6.3g)->(%6.3g,%6.3g)", 
+						line_x0, line_y0,
+						line_x1, line_y1));
+		gl.setDataLocation(xp, yp+0.4f*dy2);
+		gs.addLabel(gl);
+
 		DataArray ds = new DataArray();
 		ds.addPoint(line_x0, line_y0);
 		ds.addPoint(line_x1, line_y1);
