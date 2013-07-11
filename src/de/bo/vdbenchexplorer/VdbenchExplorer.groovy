@@ -1501,6 +1501,13 @@ class Graph_2Dx extends Graph_2D {
 			//println true;
 			return true;
 		}
+        for (Enumeration el=gs.getLabels().elements(); 
+             el.hasMoreElements();) {
+          GraphLabel gl = (GraphLabel) el.nextElement();
+          if (gl.contains(x,y)) {
+        	  return true;
+          }
+        }
 		//println false;
 		return false;
 	}
