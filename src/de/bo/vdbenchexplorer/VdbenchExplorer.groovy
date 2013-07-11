@@ -1878,8 +1878,8 @@ class Plot {
 					line_x1 = toDataX(it.x);
 					line_y1 = toDataY(it.y);
 					//println "("+it.x+","+it.y+")"+"->("+line_x1+","+line_y1+")";
-					redraw();
 				}
+				redraw();
 			}
 		);
 		graph.addMouseListener(pmia);
