@@ -2,7 +2,7 @@
  * Jochen Fritzenkötter, Baltic Online Computer GmbH, Kiel 2009-2013
  */
 
-package de.bo.vdbenchexplorer;
+package de.baltic_online.vdbenchexplorer;
 
 import groovy.lang.GroovyShell;
 import groovy.swing.SwingBuilder;
@@ -42,8 +42,8 @@ enum Type { DATETIME, TIME, LABEL, INT, FLOAT };
  * - sometimes when moving columns an exception occurs:
  * Exception in thread "AWT-EventQueue-0" java.lang.NullPointerException: Cannot invoke method getRow() on null object
  * ...
- * at de.bo.vdbenchexplorer.ProxyColumn$getRow.call(Unknown Source)
- * at de.bo.vdbenchexplorer.Table.getValueAt(VdbenchExplorer.groovy:55)
+ * at de.baltic_online.vdbenchexplorer.ProxyColumn$getRow.call(Unknown Source)
+ * at de.baltic_online.vdbenchexplorer.Table.getValueAt(VdbenchExplorer.groovy:55)
  * - When adding or removing columns the column order is reset to the default.
  * This can be annoying, we need to save the column order somehow.
  */
