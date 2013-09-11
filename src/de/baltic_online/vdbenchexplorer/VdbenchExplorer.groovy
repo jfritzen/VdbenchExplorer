@@ -2580,10 +2580,8 @@ class VdbenchExplorerGUI {
 		
 		about = swing.action(name:'About', closure:{
 			JOptionPane.showMessageDialog(frame, '''
-(c) $Date$ Baltic Online Computer GmbH 
-By:  Jochen Fritzenkštter
-$URL$
-$Revision$
+(c) 2009-2013 Baltic Online Computer GmbH, Jochen Fritzenkštter
+Git commit ID: $Id$
 						''', "About", 
 					JOptionPane.INFORMATION_MESSAGE);
 		}

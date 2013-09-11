@@ -8,12 +8,7 @@ Man benötigt
 * Java Runtime-Library, >= J2SE 5.0 sollte gehen
 * Groovy, >=1.6.x sollte gehen, gibt's z.B. über [http://www.macports.org/ports.php?by=name&substr=groovy MacPorts] für Mac OS.
 * Die (etwas betagte) [http://jplot.sourceforge.net/ JPlot-Library], Version 1.2.2 von 2003 ist die letzte.
-* Das Skript VdbenchExplorer.groovy, erhältlich als Export über unseren Subversion-Server
-<pre>
-macbook:Temp jf$ svn export http://<subversion server>/VdbenchExplorer/VdbenchExplorer/src/de/bo/vdbenchexplorer/VdbenchExplorer.groovy
-A    VdbenchExplorer.groovy
-Export complete.
-</pre>
+* Das Skript VdbenchExplorer.groovy, erhältlich über github
 
 = Benutzung =
 
@@ -28,7 +23,7 @@ Es erscheint ein Hauptmenü, in dem man mit "File->Open" ein Vdbench-flatfile.ht
 
 Wenn mehrere Testläufe geladen wurden, existiert eine zusätzliche künstliche Spalte "Dataset", um die verschiedenen Testfläufe unterscheiden zu können.
 
-Ab Git-Commit 842eb13 ist es möglich, ein oder mehrere Verzeichnisse auszuwählen. Es werden dann alle in diesen Verzeichnissen findbaren "flatfile.html" importiert. 
+Ab Git-Commit d4ac370 ist es möglich, ein oder mehrere Verzeichnisse auszuwählen. Es werden dann alle in diesen Verzeichnissen findbaren "flatfile.html" importiert. 
 
 == Umgang mit Spalten ==
 
@@ -40,17 +35,17 @@ Spalten können (aus Gründen der Übersichtlichkeit) entfernt werden mittels Ko
 
 Das Plotten von Spalten erfolgt ebenfalls über Kontextmenü auf den Spaltenkopf -> "Plot" (bzw. "Don't Plot" falls die Spalte schon zum Plotten ausgewählt ist). Zum Plotten markierte Spalten erhalten einen schwarzen Spaltenkopf. Für einen Plot müssen mindestens zwei Spalten zum Plotten markiert sein. Die erste markierte Spalte ist immer die X-Achse (Abszisse), alle weitere Spalten werden jeweils in einem eigenen Fenster als Y-Achse (Ordinate) gegen die erste markierte Spalte aufgetragen. Vertauscht man die erste markierte Spalte mit einer anderen markierten, wird diese automatisch zur neuen Abszisse, alle Plot-Fenster werden automatisch auf die Abszisse umgestellt. Das ermöglicht ein schnelles Umschalten zum Studium verschiedener möglicher Abhängigkeiten der gemessenen Parameter untereinander.
 
-Ab Git-Commit 58432d6 ist es möglich, Plots gegen Veränderung zu sichern oder abzuspeichern: Rechte Maustaste auf Plot-Fenster:
+Ab Git-Commit 2ef2421 ist es möglich, Plots gegen Veränderung zu sichern oder abzuspeichern: Rechte Maustaste auf Plot-Fenster:
 * "Save as PNG": Schlägt einen Filenamen vor und speichert das Plot-Fenster in eine PNG-Datei
 * "Fix plot": Markiere das aktuelle Plot-Fenster mit grauem Hintergrund. Alle folgenden Änderungen an der Tabelle werden in dem Plot-Fenster nicht dargestellt. Abspeichern des Plot-Fensters ist möglich.
 
 ==== Predefined Plots ====
 
-Ab Git-Commit c3ff0f6: Im Hauptfenster gibt es drei Schaltflächen mit vorgefertigten Plot-Einstellungen. Die dort definierten Zeilenfilter setzen allerdings bestimmte Werte "Threads" oder "Run" voraus, weshalb nach Möglichkeit das unten aufgeführte Skript zur Messung verwendet werden sollte.
+Ab Git-Commit 59a60a1: Im Hauptfenster gibt es drei Schaltflächen mit vorgefertigten Plot-Einstellungen. Die dort definierten Zeilenfilter setzen allerdings bestimmte Werte "Threads" oder "Run" voraus, weshalb nach Möglichkeit das unten aufgeführte Skript zur Messung verwendet werden sollte.
 
 ==== Hilfsgerade ====
 
-Ab Git-Commit 787fb9c: In jedem Plot-Fenster wird eine Hilfsgerade eingzeichnet, mit Angabe von Start- und Endkoordinaten der Gerade, Differenz von End- und Start-Koordinaten (X und Y), sowie Steigung. Die initiale Gerade erstreckt sich von den minimalen X und Y-Werten aller geplotteteten Datensätze (Xmin, Ymin) bis zu den Maximal-Werten (Xmax, Ymax), d.h. linke untere Ecke bis rechte obere. Einfaches Klicken entfernt die Gerade. Durch Drücken der linken Maus-Taste, Ziehen und Loslassen wird eine neue Hilfsgerade zwischen den gewünschten Koordinaten erzeugt. Dieses Feature soll helfen, Teile von Graphen auszumessen.
+Ab Git-Commit 392049e: In jedem Plot-Fenster wird eine Hilfsgerade eingzeichnet, mit Angabe von Start- und Endkoordinaten der Gerade, Differenz von End- und Start-Koordinaten (X und Y), sowie Steigung. Die initiale Gerade erstreckt sich von den minimalen X und Y-Werten aller geplotteteten Datensätze (Xmin, Ymin) bis zu den Maximal-Werten (Xmax, Ymax), d.h. linke untere Ecke bis rechte obere. Einfaches Klicken entfernt die Gerade. Durch Drücken der linken Maus-Taste, Ziehen und Loslassen wird eine neue Hilfsgerade zwischen den gewünschten Koordinaten erzeugt. Dieses Feature soll helfen, Teile von Graphen auszumessen.
 
 === Gruppieren ===
 
