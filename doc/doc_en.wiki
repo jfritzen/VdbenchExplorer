@@ -35,7 +35,7 @@ In the main menu you select a vdbench result file ("flatfile.html") with "File->
 
 When you have loaded more than one vdbench result file, there is an additional column "Dataset" which serves to distinguish between the several result files.
 
-Starting with Git commit 5ade1ee it is possible to select one or more directories. All "flatfile.html" in these directories will then be imported.
+Starting with Git commit 50a1b4a it is possible to select one or more directories. All "flatfile.html" in these directories will then be imported.
 
 == Working with Columns ==
 
@@ -53,7 +53,7 @@ You determine which column becomes the x axis by dragging around the columns (al
 
 Data points always are connected in the same order as they appear in the table. If you want to change the order of the connected points, you have to drag around the column heads. This is intentional behaviour and can be useful, e.g. ordering plotted data points by time while plotting two other columns as x and y.
 
-Starting with Git commit 2c28989 you can protect plot windows against further changes and/or save plot windows as PNG files. Right click on the plot window and choose: * "Save as PNG": suggests a filename and save the plot into a PNG file * "Fix plot": Copy and mark the plot window with a grey background. The plot window is protected against any further changes (column reordering, filtering etc). You can still save the plot window as PNG.
+Starting with Git commit c21b2c3 you can protect plot windows against further changes and/or save plot windows as PNG files. Right click on the plot window and choose: * "Save as PNG": suggests a filename and save the plot into a PNG file * "Fix plot": Copy and mark the plot window with a grey background. The plot window is protected against any further changes (column reordering, filtering etc). You can still save the plot window as PNG.
 
 ==== Predefined Plots ====
 
@@ -61,7 +61,7 @@ Starting with Git commit 0276b0c: There are three pre-defined plot configuration
 
 ==== Auxiliary line ====
 
-Starting with Git commit 556f258: In every newly created plot window there is an auxiliary line, with starting and end coordinates, x and y differences and slope in a separate legend. This initial line extends from the minimal x and y values of the data sets to the maximum values (Xmin, Ymin) -> (Xmax, Ymax), ie left lower corner to right upper. A single click removes the line. Pressing and dragging the left mouse button creates a new auxiliary line between the desired endpoints. Intention of this feature is to help measuring distances and slopes in the plot window.
+Starting with Git commit 0464c14: In every newly created plot window there is an auxiliary line, with starting and end coordinates, x and y differences and slope in a separate legend. This initial line extends from the minimal x and y values of the data sets to the maximum values (Xmin, Ymin) -> (Xmax, Ymax), ie left lower corner to right upper. A single click removes the line. Pressing and dragging the left mouse button creates a new auxiliary line between the desired endpoints. Intention of this feature is to help measuring distances and slopes in the plot window.
 
 === Grouping ===
 

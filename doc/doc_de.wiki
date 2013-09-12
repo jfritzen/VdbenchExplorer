@@ -23,7 +23,7 @@ Es erscheint ein Hauptmenü, in dem man mit "File->Open" ein Vdbench-flatfile.ht
 
 Wenn mehrere Testläufe geladen wurden, existiert eine zusätzliche künstliche Spalte "Dataset", um die verschiedenen Testfläufe unterscheiden zu können.
 
-Ab Git-Commit 5ade1ee ist es möglich, ein oder mehrere Verzeichnisse auszuwählen. Es werden dann alle in diesen Verzeichnissen findbaren "flatfile.html" importiert. 
+Ab Git-Commit 50a1b4a ist es möglich, ein oder mehrere Verzeichnisse auszuwählen. Es werden dann alle in diesen Verzeichnissen findbaren "flatfile.html" importiert. 
 
 == Umgang mit Spalten ==
 
@@ -35,7 +35,7 @@ Spalten können (aus Gründen der Übersichtlichkeit) entfernt werden mittels Ko
 
 Das Plotten von Spalten erfolgt ebenfalls über Kontextmenü auf den Spaltenkopf -> "Plot" (bzw. "Don't Plot" falls die Spalte schon zum Plotten ausgewählt ist). Zum Plotten markierte Spalten erhalten einen schwarzen Spaltenkopf. Für einen Plot müssen mindestens zwei Spalten zum Plotten markiert sein. Die erste markierte Spalte ist immer die X-Achse (Abszisse), alle weitere Spalten werden jeweils in einem eigenen Fenster als Y-Achse (Ordinate) gegen die erste markierte Spalte aufgetragen. Vertauscht man die erste markierte Spalte mit einer anderen markierten, wird diese automatisch zur neuen Abszisse, alle Plot-Fenster werden automatisch auf die Abszisse umgestellt. Das ermöglicht ein schnelles Umschalten zum Studium verschiedener möglicher Abhängigkeiten der gemessenen Parameter untereinander.
 
-Ab Git-Commit 2c28989 ist es möglich, Plots gegen Veränderung zu sichern oder abzuspeichern: Rechte Maustaste auf Plot-Fenster:
+Ab Git-Commit c21b2c3 ist es möglich, Plots gegen Veränderung zu sichern oder abzuspeichern: Rechte Maustaste auf Plot-Fenster:
 * "Save as PNG": Schlägt einen Filenamen vor und speichert das Plot-Fenster in eine PNG-Datei
 * "Fix plot": Markiere das aktuelle Plot-Fenster mit grauem Hintergrund. Alle folgenden Änderungen an der Tabelle werden in dem Plot-Fenster nicht dargestellt. Abspeichern des Plot-Fensters ist möglich.
 
@@ -45,7 +45,7 @@ Ab Git-Commit 0276b0c: Im Hauptfenster gibt es drei Schaltflächen mit vorgefert
 
 ==== Hilfsgerade ====
 
-Ab Git-Commit 556f258: In jedem Plot-Fenster wird eine Hilfsgerade eingzeichnet, mit Angabe von Start- und Endkoordinaten der Gerade, Differenz von End- und Start-Koordinaten (X und Y), sowie Steigung. Die initiale Gerade erstreckt sich von den minimalen X und Y-Werten aller geplotteteten Datensätze (Xmin, Ymin) bis zu den Maximal-Werten (Xmax, Ymax), d.h. linke untere Ecke bis rechte obere. Einfaches Klicken entfernt die Gerade. Durch Drücken der linken Maus-Taste, Ziehen und Loslassen wird eine neue Hilfsgerade zwischen den gewünschten Koordinaten erzeugt. Dieses Feature soll helfen, Teile von Graphen auszumessen.
+Ab Git-Commit 0464c14: In jedem Plot-Fenster wird eine Hilfsgerade eingzeichnet, mit Angabe von Start- und Endkoordinaten der Gerade, Differenz von End- und Start-Koordinaten (X und Y), sowie Steigung. Die initiale Gerade erstreckt sich von den minimalen X und Y-Werten aller geplotteteten Datensätze (Xmin, Ymin) bis zu den Maximal-Werten (Xmax, Ymax), d.h. linke untere Ecke bis rechte obere. Einfaches Klicken entfernt die Gerade. Durch Drücken der linken Maus-Taste, Ziehen und Loslassen wird eine neue Hilfsgerade zwischen den gewünschten Koordinaten erzeugt. Dieses Feature soll helfen, Teile von Graphen auszumessen.
 
 === Gruppieren ===
 
@@ -53,7 +53,7 @@ Man kann die angzeigten Datenpunkte anhand der Werte einer weiteren Spalte "grup
 
 Es ist nicht möglich (oder sinnvoll) Spalten mit sehr hoher Kardinalität zum Gruppieren zu verwenden: Spalten mit mehr als 100 unterschiedlichen Werten werden nicht zur Gruppierung zugelassen. 
 
-Es kann maximal nur eine Spalte zur Zeit Gruppierungsspalte sein. Es ist aber möglich, nach mehr als einer Spalte gleichzeitig zu gruppieren, indem man die betreffenden Spalten zu einer "synthetischen" Spalte zusammenfasst und nach dieser gruppiert, s.u. Ab Git-Commit b562303 ist es auch möglich, mehrere Spalten zur Gruppierung auszuwählen.
+Es kann maximal nur eine Spalte zur Zeit Gruppierungsspalte sein. Es ist aber möglich, nach mehr als einer Spalte gleichzeitig zu gruppieren, indem man die betreffenden Spalten zu einer "synthetischen" Spalte zusammenfasst und nach dieser gruppiert, s.u. Ab Git-Commit cd2400f ist es auch möglich, mehrere Spalten zur Gruppierung auszuwählen.
 
 === Synthetische Spalten ===
 
