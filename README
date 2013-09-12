@@ -1,0 +1,9 @@
+This is a tool written in Groovy for plotting data from the Vdbench
+disk benchmarking tool (http://sourceforge.net/projects/vdbench).
+
+Documentation in Wikimedia format can be found in doc.
+
+The VdbenchExplorer tool is a single Groovy script. But you also
+need the JPlot library (http://jplot.sourceforge.net/), which is
+not included here.
+
